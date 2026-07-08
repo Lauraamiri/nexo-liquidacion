@@ -122,6 +122,7 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
 .rp-firma2 .col2 { flex: 1; text-align: right; font-size: 10.5px; }
 .rp-firma2 .linea2 { border-top: 1px dotted #000; width: 65%; margin: 26px 0 4px auto; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 
@@ -650,6 +651,117 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
 
 <script>
 var PASS = '..jeronimo';
+
+/* ============================================================
+   SUPABASE - Etapa 1: Empleados
+   La app pasa a leer y escribir empleados desde Supabase (fuente
+   de verdad), usando localStorage como copia local para que la
+   pantalla no quede en blanco si no hay internet. Si Supabase
+   falla, se avisa y se sigue trabajando con la copia local.
+   ============================================================ */
+var SUPABASE_URL = 'https://qlovatjucosiorodocjt.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsb3ZhdGp1Y29zaW9yb2RvY2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzNjcyMDMsImV4cCI6MjA5ODk0MzIwM30.twhIuNUoviWen-cJJEkyqIJ0AP6Q2d7s9WeIndnVxe4';
+var sb = (typeof window.supabase !== 'undefined')
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+// Convierte DD/MM/AAAA (formato de la app) a AAAA-MM-DD (formato de Supabase).
+// Devuelve null si esta vacio, para no mandar strings invalidas a una columna date.
+function fechaAISO(ddmmaaaa) {
+  if (!ddmmaaaa) return null;
+  var p = ddmmaaaa.split('/');
+  if (p.length !== 3) return null;
+  return p[2] + '-' + p[1].padStart(2, '0') + '-' + p[0].padStart(2, '0');
+}
+
+// Convierte AAAA-MM-DD (Supabase) a DD/MM/AAAA (formato de la app).
+function fechaDeISO(iso) {
+  if (!iso) return '';
+  var p = iso.split('-');
+  if (p.length !== 3) return '';
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+// Mapea un empleado del formato de la app al formato de la tabla empleados de Supabase.
+function empleadoASupabase(e, empresaId) {
+  return {
+    id: e.id,
+    empresa_id: empresaId,
+    apellido: e.apellido || '',
+    nombre: e.nombre || '',
+    cuil: e.cuil || '',
+    legajo: e.legajo || '',
+    puesto: e.puesto || '',
+    ingreso: fechaAISO(e.ingreso),
+    nacimiento: fechaAISO(e.nacimiento),
+    sueldo: e.sueldo === '' || e.sueldo === undefined || e.sueldo === null ? null : parseFloat(e.sueldo),
+    condicion: e.condicion || '',
+    sucursal: e.sucursal || ''
+  };
+}
+
+// Mapea una fila de Supabase al formato que usa la app (fechas DD/MM/AAAA, sueldo string).
+function empleadoDeSupabase(row) {
+  return {
+    id: row.id,
+    apellido: row.apellido || '',
+    nombre: row.nombre || '',
+    cuil: row.cuil || '',
+    legajo: row.legajo || '',
+    puesto: row.puesto || '',
+    ingreso: fechaDeISO(row.ingreso),
+    nacimiento: fechaDeISO(row.nacimiento),
+    sueldo: (row.sueldo === null || row.sueldo === undefined) ? '' : String(row.sueldo),
+    condicion: row.condicion || '',
+    sucursal: row.sucursal || ''
+  };
+}
+
+// Trae los empleados de una empresa desde Supabase y actualiza la copia local
+// (localStorage) para que quede como cache. Si falla (sin internet, etc.), no
+// rompe nada: se sigue mostrando lo que ya habia en localStorage.
+async function sincronizarEmpleadosDesdeSupabase(empresaId) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('empleados').select('*').eq('empresa_id', empresaId);
+    if (res.error) throw res.error;
+    var d = datosEmpresa(empresaId);
+    d.empleados = res.data.map(empleadoDeSupabase);
+    guardarDatosEmpresa(empresaId, d);
+    if (empresaId === empresaActual) {
+      renderEmpleados();
+      poblarSelectEmpleados();
+      renderResumenInicio();
+    }
+  } catch (err) {
+    console.error('No se pudo sincronizar empleados desde Supabase:', err);
+  }
+}
+
+// Sube (inserta o actualiza) un empleado a Supabase. Si falla, avisa: el dato
+// se guardo local pero todavia no llego a la nube, para que no se pierda de vista.
+async function guardarEmpleadoEnSupabase(emp, empresaId) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('empleados').upsert(empleadoASupabase(emp, empresaId));
+    if (res.error) throw res.error;
+  } catch (err) {
+    console.error('No se pudo guardar el empleado en Supabase:', err);
+    alert('El empleado se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet e intenta de nuevo mas tarde (Empleados > Editar > Guardar).');
+  }
+}
+
+// Borra un empleado en Supabase por ID.
+async function eliminarEmpleadoEnSupabase(id) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('empleados').delete().eq('id', id);
+    if (res.error) throw res.error;
+  } catch (err) {
+    console.error('No se pudo eliminar el empleado en Supabase:', err);
+    alert('El empleado se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
 window.onload = function() {
   // Mostrar logos en login apenas carga
   setTimeout(function() {
@@ -924,6 +1036,7 @@ function seleccionarEmpresa(emp) {
   renderEmpleados();
   poblarSelectEmpleados();
   setTipoRecibo('sac');
+  sincronizarEmpleadosDesdeSupabase(emp);
   // Logo en inicio
   document.getElementById('logo-inicio').src = LOGOS[emp];
   document.getElementById('bienvenida-titulo').textContent = emp === 'jeronimo' ? 'Distribuidora Jeronimo' : 'Romaneto';
@@ -1075,7 +1188,7 @@ function guardarEmpleado() {
   var d = datos();
   if (editandoEmpId) {
     var idx = d.empleados.findIndex(function(x) { return x.id === editandoEmpId; });
-    if (idx >= 0) { d.empleados[idx] = Object.assign({}, d.empleados[idx], emp); }
+    if (idx >= 0) { d.empleados[idx] = Object.assign({}, d.empleados[idx], emp); emp = d.empleados[idx]; }
   } else {
     emp.id = Date.now().toString() + Math.random().toString().slice(2);
     d.empleados.push(emp);
@@ -1086,6 +1199,7 @@ function guardarEmpleado() {
   poblarSelectEmpleados();
   var selActual = document.getElementById('sel-empleado').value;
   if (editandoEmpId && selActual === editandoEmpId) { onEmpleadoChange(); }
+  guardarEmpleadoEnSupabase(emp, empresaActual);
 }
 
 function eliminarEmpleado(id) {
@@ -1095,6 +1209,7 @@ function eliminarEmpleado(id) {
   guardarDatos(d);
   renderEmpleados();
   poblarSelectEmpleados();
+  eliminarEmpleadoEnSupabase(id);
 }
 
 function descargarPlantilla() {
@@ -1113,10 +1228,13 @@ function cargarCSV(event) {
     var lines = e.target.result.split('\n').filter(function(l) { return l.trim(); });
     var d = datos();
     var agregados = 0;
+    var nuevos = [];
     lines.slice(1).forEach(function(line) {
       var cols = line.split(',').map(function(c) { return c.trim().replace(/^"|"$/g, ''); });
       if (cols.length >= 6 && cols[0]) {
-        d.empleados.push({ id: Date.now().toString() + Math.random().toString().slice(2), apellido: cols[0], nombre: cols[1], cuil: cols[2], legajo: cols[3], puesto: cols[4], ingreso: cols[5], sueldo: cols[6] || '', condicion: cols[7] || 'negro', sucursal: cols[8] || 'cofico' });
+        var nuevo = { id: Date.now().toString() + Math.random().toString().slice(2), apellido: cols[0], nombre: cols[1], cuil: cols[2], legajo: cols[3], puesto: cols[4], ingreso: cols[5], sueldo: cols[6] || '', condicion: cols[7] || 'negro', sucursal: cols[8] || 'cofico' };
+        d.empleados.push(nuevo);
+        nuevos.push(nuevo);
         agregados++;
       }
     });
@@ -1124,6 +1242,7 @@ function cargarCSV(event) {
     renderEmpleados();
     poblarSelectEmpleados();
     alert(agregados + ' empleado(s) importado(s) correctamente.');
+    nuevos.forEach(function(n) { guardarEmpleadoEnSupabase(n, empresaActual); });
   };
   reader.readAsText(file);
   event.target.value = '';
@@ -1614,7 +1733,7 @@ function verPreviaMasivo() {
 function guardarSueldoEmpleado(id, valor, campo) {
   var d = datos();
   var idx = d.empleados.findIndex(function(e) { return e.id === id; });
-  if (idx >= 0) { d.empleados[idx][campo || 'sueldo'] = valor; guardarDatos(d); }
+  if (idx >= 0) { d.empleados[idx][campo || 'sueldo'] = valor; guardarDatos(d); guardarEmpleadoEnSupabase(d.empleados[idx], empresaActual); }
   verificarMasivo();
   renderEmpleados();
 }
