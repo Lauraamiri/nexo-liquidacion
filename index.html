@@ -762,6 +762,85 @@ async function eliminarEmpleadoEnSupabase(id) {
     alert('El empleado se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
   }
 }
+
+/* ============================================================
+   SUPABASE - Etapa 2: Conceptos de Liquidacion
+   ============================================================ */
+
+// Mapea un concepto del formato de la app al formato de la tabla
+// conceptos_liquidacion de Supabase (cantidad_defecto/importe_defecto son
+// columnas de texto ahi, igual que en la app, asi que no hace falta parsear).
+function conceptoASupabase(c, empresaId) {
+  return {
+    id: c.id,
+    empresa_id: empresaId,
+    nombre: c.nombre || '',
+    tipo: c.tipo || '',
+    codigo: c.codigo || '',
+    unidad: !!c.unidad,
+    cantidad_defecto: c.cantidadDefecto === undefined || c.cantidadDefecto === null ? '' : String(c.cantidadDefecto),
+    importe_defecto: c.importeDefecto === undefined || c.importeDefecto === null ? '' : String(c.importeDefecto),
+    formula: c.formula || 'manual',
+    activo: !!c.activo,
+    mostrar_en_recibo: c.mostrarEnRecibo !== false
+  };
+}
+
+// Mapea una fila de Supabase al formato que usa la app.
+function conceptoDeSupabase(row) {
+  return {
+    id: row.id,
+    nombre: row.nombre || '',
+    tipo: row.tipo || '',
+    codigo: row.codigo || '',
+    unidad: !!row.unidad,
+    cantidadDefecto: row.cantidad_defecto || '',
+    importeDefecto: row.importe_defecto || '',
+    formula: row.formula || 'manual',
+    activo: !!row.activo,
+    mostrarEnRecibo: row.mostrar_en_recibo !== false
+  };
+}
+
+// Trae los conceptos de una empresa desde Supabase y actualiza la copia local.
+async function sincronizarConceptosDesdeSupabase(empresaId) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('conceptos_liquidacion').select('*').eq('empresa_id', empresaId);
+    if (res.error) throw res.error;
+    if (!res.data.length) return; // no pisar los conceptos por defecto si Supabase todavia no tiene nada para esta empresa
+    var d = datosEmpresa(empresaId);
+    d.conceptos = res.data.map(conceptoDeSupabase);
+    guardarDatosEmpresa(empresaId, d);
+    if (empresaId === empresaActual) renderConceptosConfig();
+  } catch (err) {
+    console.error('No se pudo sincronizar conceptos desde Supabase:', err);
+  }
+}
+
+// Sube (inserta o actualiza) un concepto a Supabase.
+async function guardarConceptoEnSupabase(c, empresaId) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('conceptos_liquidacion').upsert(conceptoASupabase(c, empresaId));
+    if (res.error) throw res.error;
+  } catch (err) {
+    console.error('No se pudo guardar el concepto en Supabase:', err);
+    alert('El concepto se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
+
+// Borra un concepto en Supabase por ID.
+async function eliminarConceptoEnSupabase(id) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('conceptos_liquidacion').delete().eq('id', id);
+    if (res.error) throw res.error;
+  } catch (err) {
+    console.error('No se pudo eliminar el concepto en Supabase:', err);
+    alert('El concepto se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
 window.onload = function() {
   // Mostrar logos en login apenas carga
   setTimeout(function() {
@@ -979,6 +1058,7 @@ function guardarConcepto() {
   guardarDatosEmpresa(empresaActual, d);
   cerrarModalConcepto();
   renderConceptosConfig();
+  guardarConceptoEnSupabase(c, empresaActual);
 }
 
 // Un concepto se considera "usado" si aparece referenciado (por id) en alguna
@@ -998,6 +1078,7 @@ function toggleActivoConcepto(id) {
   c.activo = !c.activo;
   guardarDatosEmpresa(empresaActual, d);
   renderConceptosConfig();
+  guardarConceptoEnSupabase(c, empresaActual);
 }
 
 function eliminarConcepto(id) {
@@ -1010,6 +1091,7 @@ function eliminarConcepto(id) {
   d.conceptos = d.conceptos.filter(function(x) { return x.id !== id; });
   guardarDatosEmpresa(empresaActual, d);
   renderConceptosConfig();
+  eliminarConceptoEnSupabase(id);
 }
 
 function login() {
@@ -1037,6 +1119,7 @@ function seleccionarEmpresa(emp) {
   poblarSelectEmpleados();
   setTipoRecibo('sac');
   sincronizarEmpleadosDesdeSupabase(emp);
+  sincronizarConceptosDesdeSupabase(emp);
   // Logo en inicio
   document.getElementById('logo-inicio').src = LOGOS[emp];
   document.getElementById('bienvenida-titulo').textContent = emp === 'jeronimo' ? 'Distribuidora Jeronimo' : 'Romaneto';
@@ -1069,7 +1152,7 @@ function showTab(tab) {
   if (tab === 'masivo') verificarMasivo();
   if (tab === 'inicio') renderResumenInicio();
   if (tab === 'liquidaciones') initLiquidaciones();
-  if (tab === 'config') renderConceptosConfig();
+  if (tab === 'config') { renderConceptosConfig(); sincronizarConceptosDesdeSupabase(empresaActual); }
 }
 
 function calcularAntiguedad(fechaStr) {
