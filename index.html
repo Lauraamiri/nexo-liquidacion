@@ -841,6 +841,136 @@ async function eliminarConceptoEnSupabase(id) {
     alert('El concepto se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
   }
 }
+
+/* ============================================================
+   SUPABASE - Etapa 3: Liquidaciones (+ liquidacion_items)
+   Nota: la tabla liquidacion_items de Supabase todavia no tiene
+   columna "formula" (es anterior a esa funcionalidad). Se guarda
+   igual el total ya calculado, que es lo que importa para el
+   historial; si el item se vuelve a editar despues de traerlo de
+   Supabase, se recalcula como "Cantidad x Importe" por defecto.
+   ============================================================ */
+
+// Arma la fila de liquidaciones + el array de filas de liquidacion_items
+// a partir de una liquidacion en formato de la app.
+function liquidacionASupabase(l, empresaId) {
+  var fila = {
+    id: l.id,
+    empresa_id: empresaId,
+    empleado_id: l.empleadoId,
+    empleado_nombre: l.empleadoNombre,
+    periodo: l.periodo,
+    mes: l.mes,
+    anio: String(l.anio),
+    observaciones: l.observaciones || '',
+    total_haberes: l.totalHaberes,
+    total_descuentos: l.totalDescuentos,
+    neto: l.neto,
+    fecha_guardado: new Date().toISOString()
+  };
+  var items = (l.conceptosUsados || []).map(function(item) {
+    return {
+      id: item.itemId,
+      liquidacion_id: l.id,
+      concepto_id: item.conceptoId,
+      nombre: item.nombre,
+      tipo: item.tipo,
+      codigo: item.codigo || '',
+      mostrar_en_recibo: item.mostrarEnRecibo !== false,
+      cantidad: item.cantidad === '' || item.cantidad === undefined ? null : parseFloat(item.cantidad),
+      importe_unitario: item.importeUnitario === '' || item.importeUnitario === undefined ? null : parseFloat(item.importeUnitario),
+      total: item.total,
+      observaciones: item.observaciones || ''
+    };
+  });
+  return { fila: fila, items: items };
+}
+
+// Reconstruye una liquidacion en formato de la app a partir de la fila de
+// Supabase y sus items.
+function liquidacionDeSupabase(row, items) {
+  return {
+    id: row.id,
+    empresa: row.empresa_id,
+    empleadoId: row.empleado_id,
+    empleadoNombre: row.empleado_nombre,
+    periodo: row.periodo,
+    mes: row.mes,
+    anio: row.anio,
+    observaciones: row.observaciones || '',
+    totalHaberes: row.total_haberes,
+    totalDescuentos: row.total_descuentos,
+    neto: row.neto,
+    fecha_guardado: row.fecha_guardado ? new Date(row.fecha_guardado).toLocaleDateString('es-AR') : '',
+    conceptosUsados: items.map(function(it) {
+      return {
+        itemId: it.id, conceptoId: it.concepto_id, nombre: it.nombre, tipo: it.tipo, codigo: it.codigo || '',
+        mostrarEnRecibo: it.mostrar_en_recibo !== false, cantidad: it.cantidad, importeUnitario: it.importe_unitario,
+        formula: 'cantidad_importe', total: it.total, observaciones: it.observaciones || ''
+      };
+    })
+  };
+}
+
+// Trae las liquidaciones de una empresa (con sus items) desde Supabase y
+// actualiza la copia local.
+async function sincronizarLiquidacionesDesdeSupabase(empresaId) {
+  if (!sb) return;
+  try {
+    var resLiq = await sb.from('liquidaciones').select('*').eq('empresa_id', empresaId);
+    if (resLiq.error) throw resLiq.error;
+    if (!resLiq.data.length) return; // no pisar datos locales si Supabase todavia no tiene nada para esta empresa
+    var ids = resLiq.data.map(function(r) { return r.id; });
+    var resItems = await sb.from('liquidacion_items').select('*').in('liquidacion_id', ids);
+    if (resItems.error) throw resItems.error;
+    var itemsPorLiq = {};
+    resItems.data.forEach(function(it) {
+      (itemsPorLiq[it.liquidacion_id] = itemsPorLiq[it.liquidacion_id] || []).push(it);
+    });
+    var d = datosEmpresa(empresaId);
+    d.liquidaciones = resLiq.data.map(function(row) {
+      return liquidacionDeSupabase(row, itemsPorLiq[row.id] || []);
+    });
+    guardarDatosEmpresa(empresaId, d);
+    if (empresaId === liqEmpresaSel) renderHistorialLiquidaciones();
+  } catch (err) {
+    console.error('No se pudo sincronizar liquidaciones desde Supabase:', err);
+  }
+}
+
+// Sube (inserta o actualiza) una liquidacion y reemplaza sus items en Supabase.
+async function guardarLiquidacionEnSupabase(l, empresaId) {
+  if (!sb) return;
+  try {
+    var datos = liquidacionASupabase(l, empresaId);
+    var res1 = await sb.from('liquidaciones').upsert(datos.fila);
+    if (res1.error) throw res1.error;
+    // se reemplazan los items: se borran los anteriores de esta liquidacion y se insertan los actuales
+    var res2 = await sb.from('liquidacion_items').delete().eq('liquidacion_id', l.id);
+    if (res2.error) throw res2.error;
+    if (datos.items.length) {
+      var res3 = await sb.from('liquidacion_items').insert(datos.items);
+      if (res3.error) throw res3.error;
+    }
+  } catch (err) {
+    console.error('No se pudo guardar la liquidacion en Supabase:', err);
+    alert('La liquidacion se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
+
+// Borra una liquidacion y sus items en Supabase.
+async function eliminarLiquidacionEnSupabase(id) {
+  if (!sb) return;
+  try {
+    var res1 = await sb.from('liquidacion_items').delete().eq('liquidacion_id', id);
+    if (res1.error) throw res1.error;
+    var res2 = await sb.from('liquidaciones').delete().eq('id', id);
+    if (res2.error) throw res2.error;
+  } catch (err) {
+    console.error('No se pudo eliminar la liquidacion en Supabase:', err);
+    alert('La liquidacion se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
 window.onload = function() {
   // Mostrar logos en login apenas carga
   setTimeout(function() {
@@ -2241,6 +2371,7 @@ function initLiquidaciones() {
   poblarSelectEmpleadosLiq();
   limpiarFormLiquidacion();
   renderHistorialLiquidaciones();
+  sincronizarLiquidacionesDesdeSupabase(liqEmpresaSel);
 }
 
 function onLiqEmpresaChange() {
@@ -2248,6 +2379,7 @@ function onLiqEmpresaChange() {
   limpiarFormLiquidacion();
   poblarSelectEmpleadosLiq();
   renderHistorialLiquidaciones();
+  sincronizarLiquidacionesDesdeSupabase(liqEmpresaSel);
 }
 
 function poblarSelectEmpleadosLiq() {
@@ -2374,6 +2506,7 @@ function guardarLiquidacion() {
   editandoLiqId = liq.id;
   alert('Liquidacion guardada correctamente.');
   renderHistorialLiquidaciones();
+  guardarLiquidacionEnSupabase(liq, liqEmpresaSel);
 }
 
 function renderHistorialLiquidaciones() {
@@ -2414,6 +2547,7 @@ function eliminarLiquidacion(id) {
   guardarDatosEmpresa(liqEmpresaSel, d);
   if (editandoLiqId === id) { limpiarFormLiquidacion(); }
   renderHistorialLiquidaciones();
+  eliminarLiquidacionEnSupabase(id);
 }
 
 function generarReciboDesdeLiquidacion(id) {
