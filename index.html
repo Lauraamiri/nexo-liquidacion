@@ -202,9 +202,6 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
           <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="cargarCSV(event)">
           <select id="emp-filtro-sucursal" onchange="renderEmpleados()" style="padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:13px;">
             <option value="">Todas las sucursales</option>
-            <option value="cofico">Cofico</option>
-            <option value="san_vicente">San Vicente</option>
-            <option value="general_paz">General Paz</option>
           </select>
           <button class="btn btn-sm" onclick="descargarPlantilla()" style="margin-left:auto;">Descargar plantilla CSV</button>
           <button class="btn btn-sm" onclick="exportarParaNotificaciones()">Exportar para Notificaciones</button>
@@ -346,9 +343,6 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
           <div class="field"><label>Sucursal</label>
             <select id="mas-sucursal" onchange="verificarMasivo()">
               <option value="">Todas las sucursales</option>
-              <option value="cofico">Cofico</option>
-              <option value="san_vicente">San Vicente</option>
-              <option value="general_paz">General Paz</option>
             </select>
           </div>
         </div>
@@ -503,6 +497,26 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
       </div>
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #eee; padding-bottom:8px;">
+          <div class="card-title" style="margin:0; border:none; padding:0;">Sucursales 🏢</div>
+          <button class="btn btn-dark btn-sm" onclick="abrirModalSucursal()">+ Nueva sucursal</button>
+        </div>
+        <p style="font-size:12px; color:#888; margin-bottom:12px;">Sucursales de esta empresa. Se usan en la ficha de cada empleado y para filtrar listados.</p>
+        <div id="tabla-sucursales-wrap"><div class="empty-state">No hay sucursales configuradas.</div></div>
+      </div>
+      <div class="modal-overlay" id="modal-sucursal">
+        <div class="modal">
+          <h3 id="modal-sucursal-titulo">Nueva sucursal</h3>
+          <div class="form-row">
+            <div class="field"><label>Nombre</label><input type="text" id="suc-nombre" placeholder="Ej: Nueva Cordoba"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn" onclick="cerrarModalSucursal()">Cancelar</button>
+            <button class="btn btn-dark" onclick="guardarSucursal()">Guardar</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid #eee; padding-bottom:8px;">
           <div class="card-title" style="margin:0; border:none; padding:0;">Conceptos de Liquidación 🧩</div>
           <button class="btn btn-dark btn-sm" onclick="abrirModalConcepto()">+ Nuevo concepto</button>
         </div>
@@ -567,9 +581,6 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
     <div class="form-row">
       <div class="field"><label>Sucursal</label>
         <select id="emp-sucursal">
-          <option value="cofico">Cofico</option>
-          <option value="san_vicente">San Vicente</option>
-          <option value="general_paz">General Paz</option>
         </select>
       </div>
     </div>
@@ -839,6 +850,59 @@ async function eliminarConceptoEnSupabase(id) {
   } catch (err) {
     console.error('No se pudo eliminar el concepto en Supabase:', err);
     alert('El concepto se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
+
+/* ============================================================
+   SUPABASE - Etapa 5: Sucursales
+   ============================================================ */
+
+function sucursalASupabase(s, empresaId) {
+  return { id: s.id, empresa_id: empresaId, nombre: s.nombre || '', activo: s.activo !== false };
+}
+
+function sucursalDeSupabase(row) {
+  return { id: row.id, nombre: row.nombre || '', activo: row.activo !== false };
+}
+
+// Trae las sucursales de una empresa desde Supabase y actualiza la copia local.
+async function sincronizarSucursalesDesdeSupabase(empresaId) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('sucursales').select('*').eq('empresa_id', empresaId);
+    if (res.error) throw res.error;
+    var d = datosEmpresa(empresaId);
+    d.sucursales = res.data.map(sucursalDeSupabase);
+    guardarDatosEmpresa(empresaId, d);
+    if (empresaId === empresaActual) {
+      renderSucursalesConfig();
+      poblarSelectsSucursal();
+      renderEmpleados();
+    }
+  } catch (err) {
+    console.error('No se pudo sincronizar sucursales desde Supabase:', err);
+  }
+}
+
+async function guardarSucursalEnSupabase(s, empresaId) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('sucursales').upsert(sucursalASupabase(s, empresaId));
+    if (res.error) throw res.error;
+  } catch (err) {
+    console.error('No se pudo guardar la sucursal en Supabase:', err);
+    alert('La sucursal se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
+
+async function eliminarSucursalEnSupabase(id) {
+  if (!sb) return;
+  try {
+    var res = await sb.from('sucursales').delete().eq('id', id);
+    if (res.error) throw res.error;
+  } catch (err) {
+    console.error('No se pudo eliminar la sucursal en Supabase:', err);
+    alert('La sucursal se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
   }
 }
 
@@ -1126,6 +1190,7 @@ function datosEmpresa(emp) {
   var obj = d ? JSON.parse(d) : { empleados: [], recibos: [] };
   if (!obj.liquidaciones) obj.liquidaciones = [];
   if (!obj.conceptos) obj.conceptos = defaultConceptos();
+  if (!obj.sucursales) obj.sucursales = [];
   if (migrarConceptosProporcional30(obj)) guardarDatosEmpresa(emp, obj);
   return obj;
 }
@@ -1373,11 +1438,13 @@ function seleccionarEmpresa(emp) {
   var topbarEmp = document.getElementById('topbar-empresa');
   topbarEmp.innerHTML = '<img src="' + LOGOS[emp] + '" style="height:28px; vertical-align:middle;">';
   showTab('inicio');
+  poblarSelectsSucursal();
   renderEmpleados();
   poblarSelectEmpleados();
   setTipoRecibo('sac');
   sincronizarEmpleadosDesdeSupabase(emp);
   sincronizarConceptosDesdeSupabase(emp);
+  sincronizarSucursalesDesdeSupabase(emp);
   // Logo en inicio
   document.getElementById('logo-inicio').src = LOGOS[emp];
   document.getElementById('bienvenida-titulo').textContent = emp === 'jeronimo' ? 'Distribuidora Jeronimo' : 'Romaneto';
@@ -1410,7 +1477,7 @@ function showTab(tab) {
   if (tab === 'masivo') verificarMasivo();
   if (tab === 'inicio') renderResumenInicio();
   if (tab === 'liquidaciones') initLiquidaciones();
-  if (tab === 'config') { renderConceptosConfig(); sincronizarConceptosDesdeSupabase(empresaActual); }
+  if (tab === 'config') { renderConceptosConfig(); sincronizarConceptosDesdeSupabase(empresaActual); renderSucursalesConfig(); sincronizarSucursalesDesdeSupabase(empresaActual); }
 }
 
 function calcularAntiguedad(fechaStr) {
@@ -1466,10 +1533,126 @@ function renderResumenInicio() {
   document.getElementById('resumen-inicio').innerHTML = html;
 }
 
-function labelSucursal(s) {
-  if (s === 'san_vicente') return 'San Vicente';
-  if (s === 'general_paz') return 'General Paz';
-  return 'Cofico';
+var editandoSucursalId = null;
+
+function renderSucursalesConfig() {
+  var emp = empresaActual;
+  if (!emp) return;
+  var d = datosEmpresa(emp);
+  var wrap = document.getElementById('tabla-sucursales-wrap');
+  if (!wrap) return;
+  if (!d.sucursales.length) { wrap.innerHTML = '<div class="empty-state">No hay sucursales configuradas.</div>'; return; }
+  var lista = d.sucursales.slice().sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
+  var html = '<div style="overflow-x:auto;"><table class="tabla"><thead><tr><th>Sucursal</th><th>Estado</th><th></th></tr></thead><tbody>';
+  lista.forEach(function(s) {
+    var badgeEstado = s.activo ? '<span class="badge badge-sac">Activo</span>' : '<span class="badge badge-off">Inactivo</span>';
+    html += '<tr><td><strong>' + s.nombre + '</strong></td><td>' + badgeEstado + '</td>'
+      + '<td style="white-space:nowrap;"><button class="btn btn-sm" onclick="abrirModalSucursal(\'' + s.id + '\')">Editar</button> '
+      + '<button class="btn btn-sm" onclick="toggleActivoSucursal(\'' + s.id + '\')">' + (s.activo ? 'Desactivar' : 'Activar') + '</button> '
+      + '<button class="btn btn-sm btn-danger" onclick="eliminarSucursal(\'' + s.id + '\')">Eliminar</button></td></tr>';
+  });
+  html += '</tbody></table></div>';
+  wrap.innerHTML = html;
+}
+
+function abrirModalSucursal(id) {
+  editandoSucursalId = id || null;
+  document.getElementById('modal-sucursal-titulo').textContent = id ? 'Editar sucursal' : 'Nueva sucursal';
+  if (id) {
+    var d = datosEmpresa(empresaActual);
+    var s = d.sucursales.find(function(x) { return x.id === id; });
+    if (!s) return;
+    document.getElementById('suc-nombre').value = s.nombre;
+  } else {
+    document.getElementById('suc-nombre').value = '';
+  }
+  document.getElementById('modal-sucursal').classList.add('open');
+}
+
+function cerrarModalSucursal() {
+  document.getElementById('modal-sucursal').classList.remove('open');
+  editandoSucursalId = null;
+}
+
+// Compara nombres de forma flexible (sin mayusculas/tildes/espacios extra)
+// para detectar sucursales parecidas antes de guardar.
+function normalizarNombreSucursal(nombre) {
+  return nombre.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+}
+
+function guardarSucursal() {
+  var nombre = document.getElementById('suc-nombre').value.trim();
+  if (!nombre) { alert('El nombre de la sucursal es obligatorio.'); return; }
+  var d = datosEmpresa(empresaActual);
+  var norm = normalizarNombreSucursal(nombre);
+  var parecida = d.sucursales.find(function(s) { return s.id !== editandoSucursalId && normalizarNombreSucursal(s.nombre) === norm; });
+  if (parecida) { alert('Ya existe una sucursal con ese nombre ("' + parecida.nombre + '"). Elegi un nombre distinto para evitar duplicados.'); return; }
+  var s;
+  if (editandoSucursalId) {
+    s = d.sucursales.find(function(x) { return x.id === editandoSucursalId; });
+    if (!s) return;
+    s.nombre = nombre;
+  } else {
+    s = { id: 'suc_' + Date.now().toString() + Math.random().toString().slice(2), nombre: nombre, activo: true };
+    d.sucursales.push(s);
+  }
+  guardarDatosEmpresa(empresaActual, d);
+  cerrarModalSucursal();
+  renderSucursalesConfig();
+  poblarSelectsSucursal();
+  guardarSucursalEnSupabase(s, empresaActual);
+}
+
+function toggleActivoSucursal(id) {
+  var d = datosEmpresa(empresaActual);
+  var s = d.sucursales.find(function(x) { return x.id === id; });
+  if (!s) return;
+  s.activo = !s.activo;
+  guardarDatosEmpresa(empresaActual, d);
+  renderSucursalesConfig();
+  poblarSelectsSucursal();
+  guardarSucursalEnSupabase(s, empresaActual);
+}
+
+function eliminarSucursal(id) {
+  var d = datosEmpresa(empresaActual);
+  var enUso = d.empleados.filter(function(e) { return e.sucursal === id; }).length;
+  if (enUso > 0) { alert('No se puede eliminar: hay ' + enUso + ' empleado(s) asignado(s) a esta sucursal. Reasignalos primero o desactivala en vez de eliminarla.'); return; }
+  if (!confirm('Eliminar esta sucursal?')) return;
+  d.sucursales = d.sucursales.filter(function(x) { return x.id !== id; });
+  guardarDatosEmpresa(empresaActual, d);
+  renderSucursalesConfig();
+  poblarSelectsSucursal();
+  eliminarSucursalEnSupabase(id);
+}
+
+// Repuebla todos los selects de sucursal (ficha de empleado, filtro de
+// listado, filtro del panel Masivo) con las sucursales activas de la
+// empresa actual. Se llama al entrar a la empresa y cada vez que cambia
+// la lista de sucursales.
+function poblarSelectsSucursal() {
+  var d = datosEmpresa(empresaActual);
+  var activas = (d.sucursales || []).filter(function(s) { return s.activo; }).slice().sort(function(a, b) { return a.nombre.localeCompare(b.nombre); });
+  var opciones = activas.map(function(s) { return '<option value="' + s.id + '">' + s.nombre + '</option>'; }).join('');
+
+  var selEmp = document.getElementById('emp-sucursal');
+  if (selEmp) { var actualEmp = selEmp.value; selEmp.innerHTML = opciones; if (activas.some(function(s) { return s.id === actualEmp; })) selEmp.value = actualEmp; }
+
+  var selFiltro = document.getElementById('emp-filtro-sucursal');
+  if (selFiltro) { var actualFiltro = selFiltro.value; selFiltro.innerHTML = '<option value="">Todas las sucursales</option>' + opciones; selFiltro.value = actualFiltro; }
+
+  var selMasivo = document.getElementById('mas-sucursal');
+  if (selMasivo) { var actualMasivo = selMasivo.value; selMasivo.innerHTML = '<option value="">Todas las sucursales</option>' + opciones; selMasivo.value = actualMasivo; }
+}
+
+// Devuelve el nombre visible de una sucursal a partir de su ID. Si no se
+// encuentra (dato viejo o de otra empresa), muestra el valor tal cual en
+// vez de inventar una sucursal por defecto.
+function labelSucursal(id) {
+  if (!id) return '-';
+  var d = datosEmpresa(empresaActual);
+  var s = (d.sucursales || []).find(function(x) { return x.id === id; });
+  return s ? s.nombre : id;
 }
 
 function renderEmpleados() {
@@ -1477,7 +1660,7 @@ function renderEmpleados() {
   var wrap = document.getElementById('tabla-empleados-wrap');
   if (!d.empleados.length) { wrap.innerHTML = '<div class="empty-state">No hay empleados cargados.</div>'; return; }
   var filtroSuc = document.getElementById('emp-filtro-sucursal') ? document.getElementById('emp-filtro-sucursal').value : '';
-  var filtrados = d.empleados.filter(function(e) { return !filtroSuc || (e.sucursal || 'cofico') === filtroSuc; });
+  var filtrados = d.empleados.filter(function(e) { return !filtroSuc || e.sucursal === filtroSuc; });
   if (!filtrados.length) { wrap.innerHTML = '<div class="empty-state">No hay empleados en esa sucursal.</div>'; return; }
   var sorted = filtrados.slice().sort(function(a, b) { return a.apellido.localeCompare(b.apellido); });
   var html = '<div style="overflow-x:auto;"><table class="tabla"><thead><tr><th>Apellido y nombre</th><th>CUIL</th><th>Leg.</th><th>Puesto</th><th>Sucursal</th><th>Ingreso</th><th>Antiguedad</th><th>Condicion</th><th>Mejor rem.</th><th></th></tr></thead><tbody>';
@@ -1494,7 +1677,7 @@ function abrirModalEmpleado() {
   document.getElementById('modal-emp-titulo').textContent = 'Nuevo empleado';
   ['apellido', 'nombre', 'cuil', 'legajo', 'puesto', 'ingreso', 'nacimiento', 'sueldo'].forEach(function(f) { document.getElementById('emp-' + f).value = ''; });
   document.getElementById('emp-condicion').value = 'negro';
-  document.getElementById('emp-sucursal').value = 'cofico';
+  poblarSelectsSucursal();
   document.getElementById('modal-empleado').classList.add('open');
 }
 
@@ -1512,7 +1695,8 @@ function editarEmpleado(id) {
   document.getElementById('emp-nacimiento').value = e.nacimiento || '';
   document.getElementById('emp-sueldo').value = e.sueldo || '';
   document.getElementById('emp-condicion').value = e.condicion || 'negro';
-  document.getElementById('emp-sucursal').value = e.sucursal || 'cofico';
+  poblarSelectsSucursal();
+  document.getElementById('emp-sucursal').value = e.sucursal || '';
   document.getElementById('modal-empleado').classList.add('open');
 }
 
@@ -1554,7 +1738,7 @@ function eliminarEmpleado(id) {
 }
 
 function descargarPlantilla() {
-  var csv = 'apellido,nombre,cuil,legajo,puesto,fecha_ingreso,mejor_remuneracion,condicion,sucursal\nGonzalez,Maria,27-33456789-4,001,Repositora,12/03/2022,1200000,negro,cofico\nPerez,Juan,20-12345678-9,002,Vendedor,01/06/2023,1500000,monotributista,san_vicente\nRodriguez,Ana,23-30111222-5,003,Administrativa,05/02/2024,1300000,negro,general_paz\n';
+  var csv = 'apellido,nombre,cuil,legajo,puesto,fecha_ingreso,mejor_remuneracion,condicion,sucursal\nGonzalez,Maria,27-33456789-4,001,Repositora,12/03/2022,1200000,negro,\nPerez,Juan,20-12345678-9,002,Vendedor,01/06/2023,1500000,monotributista,\nRodriguez,Ana,23-30111222-5,003,Administrativa,05/02/2024,1300000,negro,\n';
   var a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = 'plantilla_empleados.csv';
@@ -1573,7 +1757,7 @@ function cargarCSV(event) {
     lines.slice(1).forEach(function(line) {
       var cols = line.split(',').map(function(c) { return c.trim().replace(/^"|"$/g, ''); });
       if (cols.length >= 6 && cols[0]) {
-        var nuevo = { id: Date.now().toString() + Math.random().toString().slice(2), apellido: cols[0], nombre: cols[1], cuil: cols[2], legajo: cols[3], puesto: cols[4], ingreso: cols[5], sueldo: cols[6] || '', condicion: cols[7] || 'negro', sucursal: cols[8] || 'cofico' };
+        var nuevo = { id: Date.now().toString() + Math.random().toString().slice(2), apellido: cols[0], nombre: cols[1], cuil: cols[2], legajo: cols[3], puesto: cols[4], ingreso: cols[5], sueldo: cols[6] || '', condicion: cols[7] || 'negro', sucursal: cols[8] || '' };
         d.empleados.push(nuevo);
         nuevos.push(nuevo);
         agregados++;
@@ -1985,7 +2169,7 @@ function exportarWordMasivo() {
 
 function empleadosMasivo(d) {
   var filtroSuc = document.getElementById('mas-sucursal') ? document.getElementById('mas-sucursal').value : '';
-  return d.empleados.filter(function(e) { return !filtroSuc || (e.sucursal || 'cofico') === filtroSuc; });
+  return d.empleados.filter(function(e) { return !filtroSuc || e.sucursal === filtroSuc; });
 }
 
 function verificarMasivo() {
