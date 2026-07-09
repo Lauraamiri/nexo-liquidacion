@@ -1472,6 +1472,7 @@ function showTab(tab) {
   document.getElementById('tab-' + tab).classList.add('active');
   var tabs = ['inicio', 'empleados', 'generar', 'masivo', 'historial', 'liquidaciones', 'reportes', 'config'];
   document.querySelectorAll('.nav-tab')[tabs.indexOf(tab)].classList.add('active');
+  if (tab === 'empleados') renderEmpleados();
   if (tab === 'historial') { renderHistorial(); sincronizarRecibosDesdeSupabase(empresaActual); }
   if (tab === 'generar') poblarSelectEmpleados();
   if (tab === 'masivo') verificarMasivo();
