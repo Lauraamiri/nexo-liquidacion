@@ -971,6 +971,134 @@ async function eliminarLiquidacionEnSupabase(id) {
     alert('La liquidacion se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
   }
 }
+
+/* ============================================================
+   SUPABASE - Etapa 4: Recibos (+ recibo_items)
+   ============================================================ */
+
+// Arma la fila de recibos + el array de filas de recibo_items a partir de
+// un recibo en formato de la app. fecha_pago y fechas del empleado se
+// guardan tal cual (texto DD/MM/AAAA), igual que ya estan en Supabase.
+function reciboASupabase(r, empresaId) {
+  var fila = {
+    id: r.id,
+    empresa_id: empresaId,
+    empleado_id: r.empleado.id,
+    periodo: r.periodo,
+    fecha_pago: r.fechaPago || '',
+    antiguedad: r.antiguedad || '',
+    condicion: r.condicion || '',
+    monto_blanco: r.montoBlanco === '' || r.montoBlanco === undefined ? null : parseFloat(r.montoBlanco) || 0,
+    neto: r.neto,
+    empleado_snapshot: r.empleado,
+    fecha_guardado: new Date().toISOString(),
+    tipo: r.tipo || '',
+    total_haberes: r.totalHaberes,
+    total_descuentos: r.totalDesc
+  };
+  var items = (r.conceptos || []).map(function(c, idx) {
+    return {
+      id: r.id + '_' + idx,
+      recibo_id: r.id,
+      nombre: c.nombre,
+      tipo: c.tipo,
+      unidades: (c.unidades === null || c.unidades === undefined || c.unidades === '') ? null : parseFloat(c.unidades),
+      importe: c.importe,
+      orden: idx
+    };
+  });
+  return { fila: fila, items: items };
+}
+
+// Reconstruye un recibo en formato de la app a partir de la fila de
+// Supabase y sus items.
+function reciboDeSupabase(row, items) {
+  items = items.slice().sort(function(a, b) { return (a.orden || 0) - (b.orden || 0); });
+  return {
+    id: row.id,
+    tipo: row.tipo || '',
+    empleado: row.empleado_snapshot || {},
+    condicion: row.condicion || '',
+    periodo: row.periodo,
+    fechaPago: row.fecha_pago || '',
+    antiguedad: row.antiguedad || '',
+    totalHaberes: row.total_haberes,
+    totalDesc: row.total_descuentos,
+    neto: row.neto,
+    montoBlanco: row.monto_blanco,
+    fecha_guardado: row.fecha_guardado ? new Date(row.fecha_guardado).toLocaleDateString('es-AR') : '',
+    conceptos: items.map(function(it) {
+      return { nombre: it.nombre, tipo: it.tipo, unidades: it.unidades, importe: it.importe };
+    })
+  };
+}
+
+// Trae los recibos de una empresa (con sus items) desde Supabase y
+// actualiza la copia local. Como puede haber muchos recibos, se hace una
+// sola vez por sesion (no en cada apertura de la pestana) para no generar
+// demasiado trafico; se puede forzar de nuevo recargando la pagina.
+var recibosSincronizados = {};
+async function sincronizarRecibosDesdeSupabase(empresaId) {
+  if (!sb || recibosSincronizados[empresaId]) return;
+  try {
+    var resRec = await sb.from('recibos').select('*').eq('empresa_id', empresaId);
+    if (resRec.error) throw resRec.error;
+    if (!resRec.data.length) { recibosSincronizados[empresaId] = true; return; }
+    var ids = resRec.data.map(function(r) { return r.id; });
+    var itemsPorRecibo = {};
+    // se consulta de a tandas de 200 ids para no exceder limites de la consulta
+    for (var i = 0; i < ids.length; i += 200) {
+      var tanda = ids.slice(i, i + 200);
+      var resItems = await sb.from('recibo_items').select('*').in('recibo_id', tanda);
+      if (resItems.error) throw resItems.error;
+      resItems.data.forEach(function(it) {
+        (itemsPorRecibo[it.recibo_id] = itemsPorRecibo[it.recibo_id] || []).push(it);
+      });
+    }
+    var d = datosEmpresa(empresaId);
+    d.recibos = resRec.data.map(function(row) {
+      return reciboDeSupabase(row, itemsPorRecibo[row.id] || []);
+    });
+    guardarDatosEmpresa(empresaId, d);
+    recibosSincronizados[empresaId] = true;
+    if (empresaId === empresaActual) renderHistorial();
+  } catch (err) {
+    console.error('No se pudo sincronizar recibos desde Supabase:', err);
+  }
+}
+
+// Sube (inserta o actualiza) un recibo y sus items en Supabase.
+async function guardarReciboEnSupabase(r, empresaId) {
+  if (!sb) return;
+  try {
+    var datosR = reciboASupabase(r, empresaId);
+    var res1 = await sb.from('recibos').upsert(datosR.fila);
+    if (res1.error) throw res1.error;
+    var res2 = await sb.from('recibo_items').delete().eq('recibo_id', r.id);
+    if (res2.error) throw res2.error;
+    if (datosR.items.length) {
+      var res3 = await sb.from('recibo_items').insert(datosR.items);
+      if (res3.error) throw res3.error;
+    }
+  } catch (err) {
+    console.error('No se pudo guardar el recibo en Supabase:', err);
+    alert('El recibo se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet y avisale a Claude si se repite.');
+  }
+}
+
+// Borra un recibo y sus items en Supabase.
+async function eliminarReciboEnSupabase(id) {
+  if (!sb) return;
+  try {
+    var res1 = await sb.from('recibo_items').delete().eq('recibo_id', id);
+    if (res1.error) throw res1.error;
+    var res2 = await sb.from('recibos').delete().eq('id', id);
+    if (res2.error) throw res2.error;
+  } catch (err) {
+    console.error('No se pudo eliminar el recibo en Supabase:', err);
+    alert('El recibo se elimino en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet.');
+  }
+}
 window.onload = function() {
   // Mostrar logos en login apenas carga
   setTimeout(function() {
@@ -1277,7 +1405,7 @@ function showTab(tab) {
   document.getElementById('tab-' + tab).classList.add('active');
   var tabs = ['inicio', 'empleados', 'generar', 'masivo', 'historial', 'liquidaciones', 'reportes', 'config'];
   document.querySelectorAll('.nav-tab')[tabs.indexOf(tab)].classList.add('active');
-  if (tab === 'historial') renderHistorial();
+  if (tab === 'historial') { renderHistorial(); sincronizarRecibosDesdeSupabase(empresaActual); }
   if (tab === 'generar') poblarSelectEmpleados();
   if (tab === 'masivo') verificarMasivo();
   if (tab === 'inicio') renderResumenInicio();
@@ -1725,6 +1853,7 @@ function guardarEnHistorial(r) {
   r.fecha_guardado = new Date().toLocaleDateString('es-AR');
   d.recibos.unshift(r);
   guardarDatos(d);
+  guardarReciboEnSupabase(r, empresaActual);
 }
 
 function generarRecibo() {
@@ -2054,6 +2183,7 @@ function eliminarRecibo(id) {
   d.recibos = (d.recibos || []).filter(function(r) { return r.id !== id; });
   guardarDatos(d);
   renderHistorial();
+  eliminarReciboEnSupabase(id);
 }
 
 function exportarParaNotificaciones() {
@@ -2592,6 +2722,7 @@ function generarReciboDesdeLiquidacion(id) {
   r.fecha_guardado = new Date().toLocaleDateString('es-AR');
   dd.recibos.unshift(r);
   guardarDatosEmpresa(liqEmpresaSel, dd);
+  guardarReciboEnSupabase(r, liqEmpresaSel);
 
   if (liqEmpresaSel === empresaActual) {
     renderHistorial();
