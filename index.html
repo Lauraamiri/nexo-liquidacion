@@ -399,9 +399,7 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
         <div class="card-title">Liquidacion del mes 💰</div>
         <div class="form-row3">
           <div class="field"><label>Empresa</label>
-            <select id="liq-empresa" onchange="onLiqEmpresaChange()">
-              <option value="jeronimo">Distribuidora Jeronimo</option>
-              <option value="romaneto">Romaneto</option>
+            <select id="liq-empresa" onchange="onLiqEmpresaChange()" disabled>
             </select>
           </div>
           <div class="field"><label>Mes</label>
@@ -2429,6 +2427,7 @@ function importarBackup(event) {
    items "manuales" mediante obtenerItemsLegacy().
    ============================================================ */
 var liqEmpresaSel = '';
+var liqPeriodoInicializado = false;
 var editandoLiqId = null;
 var liqItems = []; // conceptos agregados a la liquidacion que se esta editando/creando
 
@@ -2672,9 +2671,12 @@ function calcularTotalesLiquidacion() {
 }
 
 function initLiquidaciones() {
-  if (!liqEmpresaSel) {
-    liqEmpresaSel = empresaActual || 'jeronimo';
-    document.getElementById('liq-empresa').value = liqEmpresaSel;
+  liqEmpresaSel = empresaActual;
+  var selEmp = document.getElementById('liq-empresa');
+  selEmp.innerHTML = '<option value="' + empresaActual + '">' + (empresaActual === 'jeronimo' ? 'Distribuidora Jeronimo' : 'Romaneto') + '</option>';
+  selEmp.value = empresaActual;
+  if (!liqPeriodoInicializado) {
+    liqPeriodoInicializado = true;
     var hoy = new Date();
     var meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     document.getElementById('liq-mes').value = meses[hoy.getMonth()];
