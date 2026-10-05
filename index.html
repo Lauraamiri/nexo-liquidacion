@@ -82,6 +82,16 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
 .badge-hab { background: #eee; color: #555; }
 .badge-desc { background: #fdeaea; color: #a12626; }
 .badge-off { background: #eee; color: #999; }
+.badge-final { background: #fff4e5; color: #9a5b00; }
+.badge-baja { background: #fdeaea; color: #a12626; }
+/* Liquidacion final: filas de rubros editables */
+.rubro-final-head, .rubro-final-row { display: grid; grid-template-columns: 1fr 110px 90px 140px 36px; gap: 8px; align-items: center; }
+.rubro-final-head { margin-bottom: 6px; }
+.rubro-final-head span { font-size: 11px; font-weight: 700; color: #666; text-transform: uppercase; }
+.rubro-final-row { margin-bottom: 8px; }
+.rubro-final-row input, .rubro-final-row select { padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; width: 100%; }
+.rubro-final-ayuda { grid-column: 1 / -1; font-size: 11px; color: #888; margin: -4px 0 4px 2px; }
+tr.emp-baja td { color: #999; }
 .liq-concepto-row { display: grid; grid-template-columns: 1.3fr 80px 120px 120px 1fr 34px; gap: 8px; margin-bottom: 8px; align-items: center; }
 .liq-concepto-row input, .liq-concepto-row select { padding: 7px 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; width: 100%; }
 .liq-concepto-nombre { font-size: 13px; padding: 6px 0; }
@@ -203,6 +213,11 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
           <select id="emp-filtro-sucursal" onchange="renderEmpleados()" style="padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:13px;">
             <option value="">Todas las sucursales</option>
           </select>
+          <select id="emp-filtro-estado" onchange="renderEmpleados()" style="padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:13px;">
+            <option value="activos">Activos</option>
+            <option value="bajas">Dados de baja</option>
+            <option value="todos">Todos</option>
+          </select>
           <button class="btn btn-sm" onclick="descargarPlantilla()" style="margin-left:auto;">Descargar plantilla CSV</button>
           <button class="btn btn-sm" onclick="exportarParaNotificaciones()">Exportar para Notificaciones</button>
         </div>
@@ -216,6 +231,7 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
           <button class="btn btn-dark" id="btn-tipo-sac" onclick="setTipoRecibo('sac')">SAC 1 Semestre 2026</button>
           <button class="btn" id="btn-tipo-haberes" onclick="setTipoRecibo('haberes')">Haberes mensual</button>
+          <button class="btn" id="btn-tipo-final" onclick="setTipoRecibo('final')">Liquidación final</button>
         </div>
       </div>
       <div class="card">
@@ -226,7 +242,7 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
               <option value="">Selecciona un empleado</option>
             </select>
           </div>
-          <div class="field"><label>Periodo</label>
+          <div class="field" id="field-periodo"><label>Periodo</label>
             <select id="inp-periodo">
               <option value="SAC 1 Semestre 2026">SAC 1 Semestre 2026</option>
               <option value="Junio 2026">Junio 2026</option>
@@ -285,6 +301,38 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
           </div>
           <div id="conceptos-lista"></div>
           <button class="btn btn-sm" onclick="agregarConcepto()" style="margin-top:8px;">+ Agregar concepto</button>
+        </div>
+      </div>
+
+      <div id="panel-final" style="display:none;">
+        <div class="card">
+          <div class="card-title">Datos del egreso</div>
+          <div class="form-row">
+            <div class="field"><label>Motivo de egreso</label>
+              <select id="fin-motivo" onchange="calcularLiquidacionFinal()">
+                <option value="renuncia">Renuncia</option>
+                <option value="mutuo_acuerdo">Mutuo acuerdo (art. 241 LCT)</option>
+              </select>
+            </div>
+            <div class="field"><label>Fecha de egreso</label><input type="text" id="fin-fecha-egreso" placeholder="DD/MM/AAAA" oninput="calcularLiquidacionFinal()"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label>Sueldo mensual ($)</label><input type="number" id="fin-sueldo" placeholder="Base para dias y vacaciones" oninput="calcularLiquidacionFinal()"></div>
+            <div class="field"><label>Mejor remuneración del semestre ($)</label><input type="number" id="fin-mejor-rem" placeholder="Base para el SAC" oninput="calcularLiquidacionFinal()"></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label>Vacaciones ya gozadas este año (días)</label><input type="number" id="fin-vac-gozadas" value="0" min="0" oninput="calcularLiquidacionFinal()"></div>
+          </div>
+          <div class="sac-info" id="fin-info" style="margin-bottom:0;">Seleccioná un empleado y cargá la fecha de egreso.</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Rubros de la liquidación final</div>
+          <div class="rubro-final-head"><span>Concepto</span><span>Tipo</span><span>Unidades</span><span>Importe</span><span></span></div>
+          <div id="fin-rubros-lista"></div>
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="agregarRubroFinal()">+ Agregar concepto</button>
+            <button class="btn btn-sm" onclick="recalcularRubrosFinal()">Restablecer importes sugeridos</button>
+          </div>
         </div>
       </div>
 
@@ -388,6 +436,7 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
             <option value="">Todos los tipos</option>
             <option value="sac">SAC</option>
             <option value="haberes">Haberes</option>
+            <option value="final">Liquidación final</option>
           </select>
         </div>
         <div id="tabla-historial-wrap"><div class="empty-state">No hay recibos guardados.</div></div>
@@ -565,6 +614,7 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
     </div>
     <div class="form-row">
       <div class="field"><label>Fecha de nacimiento</label><input type="text" id="emp-nacimiento" placeholder="DD/MM/AAAA"></div>
+      <div class="field"><label>Fecha de egreso</label><input type="text" id="emp-egreso" placeholder="Vacío = empleado activo"></div>
     </div>
     <div class="form-row">
       <div class="field"><label>Mejor remuneracion ($)</label><input type="number" id="emp-sueldo" placeholder="Ej: 1200000"></div>
@@ -705,13 +755,15 @@ function empleadoASupabase(e, empresaId) {
     nacimiento: fechaAISO(e.nacimiento),
     sueldo: e.sueldo === '' || e.sueldo === undefined || e.sueldo === null ? null : parseFloat(e.sueldo),
     condicion: e.condicion || '',
-    sucursal: e.sucursal || ''
+    sucursal: e.sucursal || '',
+    fecha_egreso: fechaAISO(e.fechaEgreso),
+    motivo_egreso: e.motivoEgreso || null
   };
 }
 
 // Mapea una fila de Supabase al formato que usa la app (fechas DD/MM/AAAA, sueldo string).
 function empleadoDeSupabase(row) {
-  return {
+  var emp = {
     id: row.id,
     apellido: row.apellido || '',
     nombre: row.nombre || '',
@@ -724,6 +776,19 @@ function empleadoDeSupabase(row) {
     condicion: row.condicion || '',
     sucursal: row.sucursal || ''
   };
+  // Datos de baja: solo se toman si la tabla ya tiene esas columnas. Si no
+  // existen todavia, se conserva lo guardado en esta computadora (ver merge
+  // en sincronizarEmpleadosDesdeSupabase).
+  if ('fecha_egreso' in row) emp.fechaEgreso = fechaDeISO(row.fecha_egreso);
+  if ('motivo_egreso' in row) emp.motivoEgreso = row.motivo_egreso || '';
+  return emp;
+}
+
+// True si el error de Supabase se debe a que faltan las columnas de baja
+// (fecha_egreso / motivo_egreso) en la tabla empleados.
+function esErrorColumnasEgreso(err) {
+  var txt = (err && err.message ? err.message : '') + ' ' + (err && err.details ? err.details : '');
+  return /fecha_egreso|motivo_egreso/.test(txt);
 }
 
 // Trae los empleados de una empresa desde Supabase y actualiza la copia local
@@ -735,7 +800,15 @@ async function sincronizarEmpleadosDesdeSupabase(empresaId) {
     var res = await sb.from('empleados').select('*').eq('empresa_id', empresaId);
     if (res.error) throw res.error;
     var d = datosEmpresa(empresaId);
-    d.empleados = res.data.map(empleadoDeSupabase);
+    // Se combinan con la copia local para no perder datos que solo viven en
+    // esta computadora (ej. sueldo mensual, monto registrado, baja si la nube
+    // todavia no tiene esas columnas). Lo que viene de la nube tiene prioridad.
+    var localPorId = {};
+    (d.empleados || []).forEach(function(e) { localPorId[e.id] = e; });
+    d.empleados = res.data.map(function(row) {
+      var remoto = empleadoDeSupabase(row);
+      return localPorId[row.id] ? Object.assign({}, localPorId[row.id], remoto) : remoto;
+    });
     guardarDatosEmpresa(empresaId, d);
     if (empresaId === empresaActual) {
       renderEmpleados();
@@ -752,7 +825,15 @@ async function sincronizarEmpleadosDesdeSupabase(empresaId) {
 async function guardarEmpleadoEnSupabase(emp, empresaId) {
   if (!sb) return;
   try {
-    var res = await sb.from('empleados').upsert(empleadoASupabase(emp, empresaId));
+    var fila = empleadoASupabase(emp, empresaId);
+    var res = await sb.from('empleados').upsert(fila);
+    if (res.error && esErrorColumnasEgreso(res.error)) {
+      // La tabla todavia no tiene las columnas de baja: se guarda igual sin ellas.
+      console.warn('Supabase: faltan las columnas fecha_egreso / motivo_egreso en empleados. La baja queda guardada solo en esta computadora.');
+      delete fila.fecha_egreso;
+      delete fila.motivo_egreso;
+      res = await sb.from('empleados').upsert(fila);
+    }
     if (res.error) throw res.error;
   } catch (err) {
     console.error('No se pudo guardar el empleado en Supabase:', err);
@@ -1178,6 +1259,7 @@ var empresaActual = '';
 var editandoEmpId = null;
 var tipoRecibo = 'sac';
 var conceptos = [];
+var rubrosFinal = []; // rubros de la liquidacion final que se esta armando
 
 function fmt(n) {
   return parseFloat(n).toLocaleString('es-AR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -1479,10 +1561,12 @@ function showTab(tab) {
   if (tab === 'config') { renderConceptosConfig(); sincronizarConceptosDesdeSupabase(empresaActual); renderSucursalesConfig(); sincronizarSucursalesDesdeSupabase(empresaActual); }
 }
 
-function calcularAntiguedad(fechaStr) {
+// hastaStr (opcional, DD/MM/AAAA): calcula la antiguedad a esa fecha en vez
+// de a hoy. Se usa para empleados dados de baja (antiguedad al egreso).
+function calcularAntiguedad(fechaStr, hastaStr) {
   var parts = fechaStr.split('/');
   var ingreso = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-  var hoy = new Date();
+  var hoy = (hastaStr && parseFechaAR(hastaStr)) || new Date();
   var anios = hoy.getFullYear() - ingreso.getFullYear();
   var meses = hoy.getMonth() - ingreso.getMonth();
   if (meses < 0) { anios--; meses += 12; }
@@ -1512,9 +1596,10 @@ function labelCondicion(c) {
 
 function renderResumenInicio() {
   var d = datos();
-  var emps = d.empleados.length;
+  var activos = d.empleados.filter(empleadoActivo);
+  var emps = activos.length;
   var recibos = (d.recibos || []).length;
-  var sinSueldo = d.empleados.filter(function(e) { return !e.sueldo || parseFloat(e.sueldo) === 0; }).length;
+  var sinSueldo = activos.filter(function(e) { return !e.sueldo || parseFloat(e.sueldo) === 0; }).length;
   // "Liquidaciones" todavía no existe como concepto propio en el sistema (ver pestaña Liquidaciones,
   // en preparación); se deja en 0 a propósito para no inventar un cálculo que aún no corresponde.
   var liquidacionesMes = 0;
@@ -1662,13 +1747,25 @@ function renderEmpleados() {
   var wrap = document.getElementById('tabla-empleados-wrap');
   if (!d.empleados.length) { wrap.innerHTML = '<div class="empty-state">No hay empleados cargados.</div>'; return; }
   var filtroSuc = document.getElementById('emp-filtro-sucursal') ? document.getElementById('emp-filtro-sucursal').value : '';
-  var filtrados = d.empleados.filter(function(e) { return !filtroSuc || e.sucursal === filtroSuc; });
-  if (!filtrados.length) { wrap.innerHTML = '<div class="empty-state">No hay empleados en esa sucursal.</div>'; return; }
+  var filtroEstado = document.getElementById('emp-filtro-estado') ? document.getElementById('emp-filtro-estado').value : 'activos';
+  var filtrados = d.empleados.filter(function(e) {
+    if (filtroSuc && e.sucursal !== filtroSuc) return false;
+    if (filtroEstado === 'activos') return empleadoActivo(e);
+    if (filtroEstado === 'bajas') return !empleadoActivo(e);
+    return true;
+  });
+  if (!filtrados.length) {
+    var msgVacio = filtroEstado === 'bajas' ? 'No hay empleados dados de baja con ese filtro.' : 'No hay empleados con ese filtro.';
+    wrap.innerHTML = '<div class="empty-state">' + msgVacio + '</div>';
+    return;
+  }
   var sorted = filtrados.slice().sort(function(a, b) { return a.apellido.localeCompare(b.apellido); });
   var html = '<div style="overflow-x:auto;"><table class="tabla"><thead><tr><th>Apellido y nombre</th><th>CUIL</th><th>Leg.</th><th>Puesto</th><th>Sucursal</th><th>Ingreso</th><th>Antiguedad</th><th>Condicion</th><th>Mejor rem.</th><th></th></tr></thead><tbody>';
   sorted.forEach(function(e) {
     var sueldo = e.sueldo ? '$ ' + fmt(e.sueldo) : '<span style="color:#c00;">Sin cargar</span>';
-    html += '<tr><td><strong>' + e.apellido + ', ' + e.nombre + '</strong></td><td>' + (e.cuil || '-') + '</td><td>' + (e.legajo || '-') + '</td><td>' + (e.puesto || '-') + '</td><td>' + labelSucursal(e.sucursal) + '</td><td>' + e.ingreso + '</td><td>' + calcularAntiguedad(e.ingreso) + '</td><td>' + labelCondicion(e.condicion) + '</td><td>' + sueldo + '</td><td style="white-space:nowrap;"><button class="btn btn-sm" onclick="editarEmpleado(\'' + e.id + '\')">Editar</button> <button class="btn btn-sm btn-danger" onclick="eliminarEmpleado(\'' + e.id + '\')">Eliminar</button></td></tr>';
+    var esBaja = !empleadoActivo(e);
+    var badgeBaja = esBaja ? ' <span class="badge badge-baja" title="' + labelMotivoEgreso(e.motivoEgreso) + '">Baja ' + e.fechaEgreso + '</span>' : '';
+    html += '<tr' + (esBaja ? ' class="emp-baja"' : '') + '><td><strong>' + e.apellido + ', ' + e.nombre + '</strong>' + badgeBaja + '</td><td>' + (e.cuil || '-') + '</td><td>' + (e.legajo || '-') + '</td><td>' + (e.puesto || '-') + '</td><td>' + labelSucursal(e.sucursal) + '</td><td>' + e.ingreso + '</td><td>' + calcularAntiguedad(e.ingreso, esBaja ? e.fechaEgreso : '') + '</td><td>' + labelCondicion(e.condicion) + '</td><td>' + sueldo + '</td><td style="white-space:nowrap;"><button class="btn btn-sm" onclick="editarEmpleado(\'' + e.id + '\')">Editar</button> <button class="btn btn-sm btn-danger" onclick="eliminarEmpleado(\'' + e.id + '\')">Eliminar</button></td></tr>';
   });
   html += '</tbody></table></div>';
   wrap.innerHTML = html;
@@ -1677,7 +1774,7 @@ function renderEmpleados() {
 async function abrirModalEmpleado() {
   editandoEmpId = null;
   document.getElementById('modal-emp-titulo').textContent = 'Nuevo empleado';
-  ['apellido', 'nombre', 'cuil', 'legajo', 'puesto', 'ingreso', 'nacimiento', 'sueldo'].forEach(function(f) { document.getElementById('emp-' + f).value = ''; });
+  ['apellido', 'nombre', 'cuil', 'legajo', 'puesto', 'ingreso', 'nacimiento', 'sueldo', 'egreso'].forEach(function(f) { document.getElementById('emp-' + f).value = ''; });
   document.getElementById('emp-condicion').value = 'negro';
   poblarSelectsSucursal();
   document.getElementById('modal-empleado').classList.add('open');
@@ -1699,6 +1796,7 @@ async function editarEmpleado(id) {
   document.getElementById('emp-nacimiento').value = e.nacimiento || '';
   document.getElementById('emp-sueldo').value = e.sueldo || '';
   document.getElementById('emp-condicion').value = e.condicion || 'negro';
+  document.getElementById('emp-egreso').value = e.fechaEgreso || '';
   document.getElementById('modal-empleado').classList.add('open');
   // Se espera la lista de sucursales mas actualizada antes de seleccionar,
   // para no perder silenciosamente la sucursal real del empleado si la
@@ -1735,6 +1833,16 @@ function guardarEmpleado() {
   var ingreso = document.getElementById('emp-ingreso').value.trim();
   if (!apellido || !nombre || !ingreso) { alert('Apellido, nombre y fecha de ingreso son obligatorios.'); return; }
   var emp = { apellido: apellido, nombre: nombre, cuil: document.getElementById('emp-cuil').value.trim(), legajo: document.getElementById('emp-legajo').value.trim(), puesto: document.getElementById('emp-puesto').value.trim(), ingreso: ingreso, nacimiento: document.getElementById('emp-nacimiento').value.trim(), sueldo: document.getElementById('emp-sueldo').value.trim(), condicion: document.getElementById('emp-condicion').value, sucursal: document.getElementById('emp-sucursal').value };
+  // Baja: fecha de egreso opcional (vacia = empleado activo)
+  var fechaEgreso = document.getElementById('emp-egreso').value.trim();
+  if (fechaEgreso) {
+    var fEgr = parseFechaAR(fechaEgreso);
+    var fIng = parseFechaAR(ingreso);
+    if (!fEgr) { alert('La fecha de egreso debe tener el formato DD/MM/AAAA.'); return; }
+    if (fIng && fEgr < fIng) { alert('La fecha de egreso no puede ser anterior a la fecha de ingreso.'); return; }
+  }
+  emp.fechaEgreso = fechaEgreso;
+  if (!fechaEgreso) emp.motivoEgreso = '';
   var d = datos();
   if (editandoEmpId) {
     var idx = d.empleados.findIndex(function(x) { return x.id === editandoEmpId; });
@@ -1802,9 +1910,14 @@ function setTipoRecibo(tipo) {
   tipoRecibo = tipo;
   document.getElementById('panel-sac').style.display = tipo === 'sac' ? 'block' : 'none';
   document.getElementById('panel-haberes').style.display = tipo === 'haberes' ? 'block' : 'none';
+  document.getElementById('panel-final').style.display = tipo === 'final' ? 'block' : 'none';
   document.getElementById('btn-tipo-sac').className = tipo === 'sac' ? 'btn btn-dark' : 'btn';
   document.getElementById('btn-tipo-haberes').className = tipo === 'haberes' ? 'btn btn-dark' : 'btn';
+  document.getElementById('btn-tipo-final').className = tipo === 'final' ? 'btn btn-dark' : 'btn';
+  // En la liquidacion final el periodo sale de la fecha de egreso
+  document.getElementById('field-periodo').style.display = tipo === 'final' ? 'none' : '';
   if (tipo === 'sac') document.getElementById('inp-periodo').value = 'SAC 1 Semestre 2026';
+  if (tipo === 'final') { onEmpleadoChange(); return; }
   calcularTotales();
 }
 
@@ -1813,9 +1926,13 @@ function poblarSelectEmpleados() {
   var sel = document.getElementById('sel-empleado');
   var val = sel.value;
   sel.innerHTML = '<option value="">Selecciona un empleado</option>';
-  var sorted = d.empleados.slice().sort(function(a, b) { return a.apellido.localeCompare(b.apellido); });
+  // Activos primero; los dados de baja quedan al final y marcados
+  var sorted = d.empleados.slice().sort(function(a, b) {
+    var ba = empleadoActivo(a) ? 0 : 1, bb = empleadoActivo(b) ? 0 : 1;
+    return ba !== bb ? ba - bb : a.apellido.localeCompare(b.apellido);
+  });
   sorted.forEach(function(e) {
-    sel.innerHTML += '<option value="' + e.id + '">' + e.apellido + ', ' + e.nombre + '</option>';
+    sel.innerHTML += '<option value="' + e.id + '">' + e.apellido + ', ' + e.nombre + (empleadoActivo(e) ? '' : ' (baja)') + '</option>';
   });
   if (val) sel.value = val;
 }
@@ -1828,6 +1945,7 @@ function onEmpleadoChange() {
     document.getElementById('condicion-info').style.display = 'none';
     document.getElementById('panel-blanco').style.display = 'none';
     document.getElementById('division-preview').style.display = 'none';
+    if (tipoRecibo === 'final') prepararLiquidacionFinal(null);
     return;
   }
   document.getElementById('inp-ingreso').value = e.ingreso;
@@ -1856,6 +1974,8 @@ function onEmpleadoChange() {
       document.getElementById('row-dias-sac').style.display = 'grid';
     }
     calcularSAC();
+  } else if (tipoRecibo === 'final') {
+    prepararLiquidacionFinal(e);
   } else {
     calcularTotales();
   }
@@ -1945,9 +2065,10 @@ function actualizarBlanco() {
 function calcularTotales() {
   var empId = document.getElementById('sel-empleado').value;
   var e = empId ? datos().empleados.find(function(x) { return x.id === empId; }) : null;
-  if (tipoRecibo === 'haberes') {
+  if (tipoRecibo === 'haberes' || tipoRecibo === 'final') {
     var h = 0, desc = 0;
-    conceptos.forEach(function(c) { var v = parseFloat(c.importe) || 0; if (c.tipo === 'haber') h += v; else desc += v; });
+    var listaTotales = tipoRecibo === 'final' ? rubrosFinal : conceptos;
+    listaTotales.forEach(function(c) { var v = parseFloat(c.importe) || 0; if (c.tipo === 'haber') h += v; else desc += v; });
     var neto = h - desc;
     document.getElementById('tot-haberes').textContent = '$ ' + fmt(h);
     document.getElementById('tot-desc').textContent = '$ ' + fmt(desc);
@@ -1967,7 +2088,23 @@ function armarDatosRecibo() {
   var fechaPago = document.getElementById('inp-fecha-pago').value.trim();
   if (!fechaPago) { alert('Completa la fecha de pago.'); return null; }
   var cpts = [], totalH = 0, totalD = 0;
-  if (tipoRecibo === 'sac') {
+  var empRecibo = e, egreso = null, fechaAntig = '';
+  if (tipoRecibo === 'final') {
+    egreso = leerDatosEgresoFinal(e, true);
+    if (!egreso) return null;
+    rubrosFinal.forEach(function(c) {
+      var v = parseFloat(c.importe) || 0;
+      if (!v) return; // los rubros en cero no se imprimen
+      var u = (c.unidades === '' || c.unidades === null || c.unidades === undefined) ? '' : c.unidades;
+      cpts.push({ nombre: (c.nombre || '').trim() || 'Concepto', tipo: c.tipo, importe: v, unidades: u });
+      if (c.tipo === 'haber') totalH += v; else totalD += v;
+    });
+    if (!cpts.length) { alert('La liquidacion final no tiene importes cargados.'); return null; }
+    periodo = periodoLiquidacionFinal(egreso.fecha);
+    // Foto del empleado con los datos de baja (se guarda dentro del recibo)
+    empRecibo = Object.assign({}, e, { fechaEgreso: egreso.fecha, motivoEgreso: egreso.motivo });
+    fechaAntig = egreso.fecha;
+  } else if (tipoRecibo === 'sac') {
     var mejorRem = parseFloat(document.getElementById('inp-mejor-rem').value) || 0;
     if (!mejorRem) { alert('Ingresa la mejor remuneracion.'); return null; }
     var completo = esSACCompleto(e.ingreso);
@@ -1980,7 +2117,330 @@ function armarDatosRecibo() {
     conceptos.forEach(function(c) { var v = parseFloat(c.importe) || 0; cpts.push({ nombre: c.nombre, tipo: c.tipo, importe: v }); if (c.tipo === 'haber') totalH += v; else totalD += v; });
   }
   var montoBlanco = (e.condicion === 'blanco') ? (parseFloat(document.getElementById('inp-monto-blanco').value) || 0) : 0;
-  return { tipo: tipoRecibo, empleado: e, condicion: e.condicion || 'negro', periodo: periodo, fechaPago: fechaPago, antiguedad: calcularAntiguedad(e.ingreso), conceptos: cpts, totalHaberes: totalH, totalDesc: totalD, neto: totalH - totalD, montoBlanco: montoBlanco };
+  var recibo = { tipo: tipoRecibo, empleado: empRecibo, condicion: e.condicion || 'negro', periodo: periodo, fechaPago: fechaPago, antiguedad: calcularAntiguedad(e.ingreso, fechaAntig), conceptos: cpts, totalHaberes: totalH, totalDesc: totalD, neto: totalH - totalD, montoBlanco: montoBlanco };
+  if (egreso) recibo.egreso = egreso;
+  return recibo;
+}
+
+
+/* ============================================================
+   LIQUIDACION FINAL (Generar recibo > Liquidacion final)
+   Renuncia y mutuo acuerdo: dias trabajados del mes, SAC proporcional,
+   vacaciones no gozadas y SAC sobre vacaciones. Los importes se proponen
+   automaticamente y se pueden corregir a mano.
+   ============================================================ */
+var MESES_NOMBRE = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+var MOTIVOS_EGRESO = { renuncia: 'Renuncia', mutuo_acuerdo: 'Mutuo acuerdo (art. 241 LCT)' };
+
+function empleadoActivo(e) {
+  return !(e && e.fechaEgreso);
+}
+
+function labelMotivoEgreso(m) {
+  return MOTIVOS_EGRESO[m] || (m ? m : 'Sin especificar');
+}
+
+// DD/MM/AAAA -> Date (o null si la fecha no es valida)
+function parseFechaAR(str) {
+  if (!str) return null;
+  var p = String(str).trim().split('/');
+  if (p.length !== 3) return null;
+  var dd = parseInt(p[0], 10), mm = parseInt(p[1], 10), aa = parseInt(p[2], 10);
+  if (!dd || !mm || !aa || aa < 1900) return null;
+  var f = new Date(aa, mm - 1, dd);
+  if (f.getFullYear() !== aa || f.getMonth() !== mm - 1 || f.getDate() !== dd) return null;
+  return f;
+}
+
+// Dias corridos entre dos fechas, contando ambos extremos
+function diasEntreInclusive(desde, hasta) {
+  return Math.round((hasta - desde) / 86400000) + 1;
+}
+
+function aniosCumplidos(desde, hasta) {
+  var a = hasta.getFullYear() - desde.getFullYear();
+  if (hasta.getMonth() < desde.getMonth() || (hasta.getMonth() === desde.getMonth() && hasta.getDate() < desde.getDate())) a--;
+  return Math.max(0, a);
+}
+
+// Dias de vacaciones anuales segun antiguedad (art. 150 LCT)
+function diasVacacionesPorAntiguedad(anios) {
+  if (anios < 5) return 14;
+  if (anios < 10) return 21;
+  if (anios < 20) return 28;
+  return 35;
+}
+
+function redondear2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function escAttr(v) {
+  return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function periodoLiquidacionFinal(fechaEgresoStr) {
+  var f = parseFechaAR(fechaEgresoStr);
+  return f ? 'Liquidacion final ' + MESES_NOMBRE[f.getMonth()] + ' ' + f.getFullYear() : 'Liquidacion final';
+}
+
+// Datos de baja de un recibo (nuevo o recuperado de la nube). Null si no es final.
+function datosEgresoRecibo(r) {
+  if (!r || r.tipo !== 'final') return null;
+  if (r.egreso && r.egreso.fecha) return r.egreso;
+  var e = r.empleado || {};
+  return { fecha: e.fechaEgreso || '-', motivo: e.motivoEgreso || '' };
+}
+
+// Lee y valida los datos del egreso cargados en pantalla.
+// conAlertas = true muestra el problema al usuario (al generar el recibo).
+function leerDatosEgresoFinal(e, conAlertas) {
+  function fallo(msg) { if (conAlertas) alert(msg); return null; }
+  if (!e) return fallo('Selecciona un empleado.');
+  var fechaStr = document.getElementById('fin-fecha-egreso').value.trim();
+  var fEgreso = parseFechaAR(fechaStr);
+  if (!fEgreso) return fallo('Completa la fecha de egreso (DD/MM/AAAA).');
+  var fIngreso = parseFechaAR(e.ingreso);
+  if (!fIngreso) return fallo('El empleado no tiene una fecha de ingreso valida en su ficha.');
+  if (fEgreso < fIngreso) return fallo('La fecha de egreso no puede ser anterior a la fecha de ingreso (' + e.ingreso + ').');
+  return {
+    fecha: fechaStr,
+    motivo: document.getElementById('fin-motivo').value,
+    fEgreso: fEgreso,
+    fIngreso: fIngreso,
+    sueldo: parseFloat(document.getElementById('fin-sueldo').value) || 0,
+    mejorRem: parseFloat(document.getElementById('fin-mejor-rem').value) || 0,
+    vacGozadas: Math.max(0, parseFloat(document.getElementById('fin-vac-gozadas').value) || 0)
+  };
+}
+
+// Calcula los rubros sugeridos (sin tocar la pantalla). Devuelve tambien un
+// resumen de los datos usados, para mostrarlo como ayuda.
+function calcularRubrosSugeridosFinal(eg) {
+  var F = eg.fEgreso, I = eg.fIngreso, anio = F.getFullYear();
+  var S = eg.sueldo, M = eg.mejorRem || eg.sueldo;
+  var rubros = [];
+
+  // 1) Dias trabajados del mes de egreso (sueldo / 30 x dias, tope 30)
+  var inicioMes = new Date(anio, F.getMonth(), 1);
+  var desdeMes = I > inicioMes ? I : inicioMes;
+  var ultimoDiaMes = new Date(anio, F.getMonth() + 1, 0).getDate();
+  var diasMes = diasEntreInclusive(desdeMes, F);
+  if (desdeMes.getDate() === 1 && F.getDate() === ultimoDiaMes) diasMes = 30; // mes completo
+  diasMes = Math.min(30, diasMes);
+  rubros.push({ clave: 'dias', nombre: 'Dias trabajados ' + MESES_NOMBRE[F.getMonth()] + ' ' + anio, tipo: 'haber',
+    unidades: diasMes, valorUnidad: S / 30, ayuda: 'Sueldo mensual / 30 x dias trabajados en el mes' });
+
+  // 2) SAC proporcional del semestre en curso
+  var primerSem = F.getMonth() < 6;
+  var semIni = primerSem ? new Date(anio, 0, 1) : new Date(anio, 6, 1);
+  var semFin = primerSem ? new Date(anio, 5, 30) : new Date(anio, 11, 31);
+  var diasSemTotal = diasEntreInclusive(semIni, semFin);
+  var diasSem = diasEntreInclusive(I > semIni ? I : semIni, F);
+  rubros.push({ clave: 'sac', nombre: 'SAC proporcional ' + (primerSem ? '1' : '2') + ' semestre ' + anio, tipo: 'haber',
+    unidades: diasSem, valorUnidad: M / 2 / diasSemTotal, ayuda: 'Mejor remuneracion / 2 x ' + diasSem + ' dias / ' + diasSemTotal + ' dias del semestre' });
+
+  // 3) Vacaciones no gozadas proporcionales (art. 156 LCT, valor dia = sueldo / 25)
+  var antigAnios = aniosCumplidos(I, new Date(anio, 11, 31));
+  var vacAnuales = diasVacacionesPorAntiguedad(antigAnios);
+  var inicioAnio = new Date(anio, 0, 1);
+  var diasAnio = diasEntreInclusive(I > inicioAnio ? I : inicioAnio, F);
+  var diasAnioTotal = diasEntreInclusive(inicioAnio, new Date(anio, 11, 31));
+  var vacDias = Math.max(0, redondear2(vacAnuales * diasAnio / diasAnioTotal - eg.vacGozadas));
+  rubros.push({ clave: 'vacaciones', nombre: 'Vacaciones no gozadas ' + anio, tipo: 'haber',
+    unidades: vacDias, valorUnidad: S / 25, ayuda: vacAnuales + ' dias/año x ' + diasAnio + ' dias trabajados / ' + diasAnioTotal + (eg.vacGozadas ? ' - ' + eg.vacGozadas + ' gozados' : '') + ' · valor dia = sueldo / 25' });
+
+  // 4) SAC sobre vacaciones no gozadas (1/12 del importe de vacaciones)
+  rubros.push({ clave: 'sac_vac', nombre: 'SAC s/ vacaciones no gozadas', tipo: 'haber',
+    unidades: '', valorUnidad: null, ayuda: 'Importe de vacaciones no gozadas / 12' });
+
+  // 5) Mutuo acuerdo: gratificacion pactada (se carga a mano)
+  if (eg.motivo === 'mutuo_acuerdo') {
+    rubros.push({ clave: 'gratificacion', nombre: 'Gratificacion por cese (art. 241 LCT)', tipo: 'haber',
+      unidades: '', valorUnidad: null, manualImporte: true, ayuda: 'Monto pactado en el acuerdo. Dejar vacio si no hay.' });
+  }
+
+  rubros.forEach(function(r) {
+    if (r.valorUnidad !== null) r.importe = redondear2((parseFloat(r.unidades) || 0) * r.valorUnidad);
+  });
+  var vac = rubros.find(function(r) { return r.clave === 'vacaciones'; });
+  rubros.find(function(r) { return r.clave === 'sac_vac'; }).importe = redondear2(vac.importe / 12);
+
+  return { rubros: rubros, antigAnios: antigAnios, vacAnuales: vacAnuales };
+}
+
+// Al elegir empleado (o al cambiar a "Liquidacion final"): precarga los
+// datos de la ficha y arma la propuesta.
+function prepararLiquidacionFinal(e) {
+  rubrosFinal = [];
+  document.getElementById('fin-fecha-egreso').value = e ? (e.fechaEgreso || '') : '';
+  document.getElementById('fin-motivo').value = (e && MOTIVOS_EGRESO[e.motivoEgreso]) ? e.motivoEgreso : 'renuncia';
+  document.getElementById('fin-sueldo').value = e ? (e.sueldoMensual || e.sueldo || '') : '';
+  document.getElementById('fin-mejor-rem').value = e ? (e.sueldo || e.sueldoMensual || '') : '';
+  document.getElementById('fin-vac-gozadas').value = 0;
+  calcularLiquidacionFinal();
+}
+
+// Recalcula los rubros automaticos respetando los que el usuario corrigio
+// a mano y los conceptos que agrego.
+function calcularLiquidacionFinal() {
+  var empId = document.getElementById('sel-empleado').value;
+  var e = empId ? datos().empleados.find(function(x) { return x.id === empId; }) : null;
+  var info = document.getElementById('fin-info');
+  var eg = leerDatosEgresoFinal(e, false);
+  if (!eg) {
+    info.innerHTML = !e ? 'Seleccioná un empleado.' : 'Cargá la fecha de egreso (DD/MM/AAAA) para calcular la liquidación.';
+    // sin fecha valida se quitan los rubros automaticos, se conservan los agregados a mano
+    rubrosFinal = rubrosFinal.filter(function(r) { return !r.auto; });
+    renderRubrosFinal();
+    return;
+  }
+  var calc = calcularRubrosSugeridosFinal(eg);
+  var anteriores = {};
+  rubrosFinal.forEach(function(r) { if (r.auto) anteriores[r.clave] = r; });
+  var nuevosAuto = calc.rubros.map(function(s) {
+    var prev = anteriores[s.clave];
+    var item = Object.assign({ id: prev ? prev.id : nuevoConceptoId(), auto: true, editado: false }, s);
+    if (prev && (prev.editado || s.manualImporte)) {
+      // se respetan los valores que cargo el usuario
+      item.unidades = prev.unidades;
+      item.importe = prev.importe;
+      item.editado = prev.editado;
+    }
+    if (prev && prev.nombreEditado) {
+      item.nombre = prev.nombre;
+      item.tipo = prev.tipo;
+      item.nombreEditado = true;
+    }
+    if (s.manualImporte && !prev) item.importe = '';
+    return item;
+  });
+  var manuales = rubrosFinal.filter(function(r) { return !r.auto; });
+  rubrosFinal = nuevosAuto.concat(manuales);
+  // si vacaciones se corrigio a mano y el SAC s/ vacaciones no, se recalcula sobre el valor corregido
+  sincronizarSacVacaciones();
+
+  var notaMotivo = eg.motivo === 'mutuo_acuerdo'
+    ? 'Mutuo acuerdo: no corresponde indemnización legal. Si se pactó una gratificación, cargala en su renglón.'
+    : 'Renuncia: no corresponde indemnización ni preaviso.';
+  var sinSueldo = !eg.sueldo ? ' <strong style="color:#c00;">Falta el sueldo mensual.</strong>' : '';
+  info.innerHTML = '<strong>' + periodoLiquidacionFinal(eg.fecha) + '</strong> · Antigüedad al egreso: <strong>' + calcularAntiguedad(e.ingreso, eg.fecha) + '</strong> · Vacaciones anuales: <strong>' + calc.vacAnuales + ' días</strong><br>' + notaMotivo + sinSueldo + '<br>Los importes son una propuesta: podés corregir cualquier valor antes de generar el recibo.';
+  renderRubrosFinal();
+}
+
+// Mantiene el SAC s/ vacaciones en 1/12 de las vacaciones, salvo que se haya editado a mano
+function sincronizarSacVacaciones() {
+  var vac = rubrosFinal.find(function(r) { return r.auto && r.clave === 'vacaciones'; });
+  var sacVac = rubrosFinal.find(function(r) { return r.auto && r.clave === 'sac_vac'; });
+  if (!vac || !sacVac || sacVac.editado) return null;
+  sacVac.importe = redondear2((parseFloat(vac.importe) || 0) / 12);
+  return sacVac;
+}
+
+function renderRubrosFinal() {
+  var lista = document.getElementById('fin-rubros-lista');
+  if (!rubrosFinal.length) {
+    lista.innerHTML = '<div class="empty-state" style="padding:20px;">Todavía no hay rubros para liquidar.</div>';
+    calcularTotales();
+    return;
+  }
+  lista.innerHTML = rubrosFinal.map(function(r) {
+    var id = r.id;
+    var ayuda = r.auto && r.ayuda ? '<div class="rubro-final-ayuda">' + r.ayuda + (r.editado ? ' · <em>corregido a mano</em>' : '') + '</div>' : '';
+    return '<div class="rubro-final-row">'
+      + '<input type="text" value="' + escAttr(r.nombre) + '" placeholder="Nombre del concepto" oninput="actualizarRubroFinal(\'' + id + '\',\'nombre\',this.value)">'
+      + '<select onchange="actualizarRubroFinal(\'' + id + '\',\'tipo\',this.value)"><option value="haber"' + (r.tipo === 'haber' ? ' selected' : '') + '>Haber</option><option value="descuento"' + (r.tipo === 'descuento' ? ' selected' : '') + '>Descuento</option></select>'
+      + '<input type="number" id="fin-uni-' + id + '" value="' + escAttr(r.unidades) + '" placeholder="-" oninput="actualizarRubroFinal(\'' + id + '\',\'unidades\',this.value)">'
+      + '<input type="number" id="fin-imp-' + id + '" value="' + escAttr(r.importe) + '" placeholder="0" oninput="actualizarRubroFinal(\'' + id + '\',\'importe\',this.value)">'
+      + '<button class="btn-remove" title="Quitar" onclick="quitarRubroFinal(\'' + id + '\')">x</button>'
+      + ayuda
+      + '</div>';
+  }).join('');
+  calcularTotales();
+}
+
+// Edicion de un renglon: actualiza solo los campos afectados (sin re-render,
+// para no perder el foco del input que se esta escribiendo).
+function actualizarRubroFinal(id, campo, valor) {
+  var r = rubrosFinal.find(function(x) { return x.id === id; });
+  if (!r) return;
+  r[campo] = valor;
+  if (r.auto && (campo === 'unidades' || campo === 'importe')) r.editado = true;
+  if (r.auto && (campo === 'nombre' || campo === 'tipo')) r.nombreEditado = true;
+  // al cambiar unidades de un rubro con valor por unidad, se recalcula su importe
+  if (campo === 'unidades' && r.valorUnidad !== null && r.valorUnidad !== undefined) {
+    r.importe = redondear2((parseFloat(valor) || 0) * r.valorUnidad);
+    var inpImp = document.getElementById('fin-imp-' + id);
+    if (inpImp) inpImp.value = r.importe;
+  }
+  if (r.clave === 'vacaciones' && (campo === 'unidades' || campo === 'importe')) {
+    var sacVac = sincronizarSacVacaciones();
+    if (sacVac) {
+      var inpSac = document.getElementById('fin-imp-' + sacVac.id);
+      if (inpSac) inpSac.value = sacVac.importe;
+    }
+  }
+  calcularTotales();
+}
+
+function agregarRubroFinal() {
+  rubrosFinal.push({ id: nuevoConceptoId(), auto: false, nombre: '', tipo: 'haber', unidades: '', importe: '' });
+  renderRubrosFinal();
+}
+
+function quitarRubroFinal(id) {
+  rubrosFinal = rubrosFinal.filter(function(r) { return r.id !== id; });
+  renderRubrosFinal();
+}
+
+// Descarta las correcciones manuales de los rubros automaticos
+function recalcularRubrosFinal() {
+  rubrosFinal.forEach(function(r) {
+    if (!r.auto) return;
+    r.nombreEditado = false;
+    if (!r.manualImporte) r.editado = false;
+  });
+  calcularLiquidacionFinal();
+}
+
+// Antes de guardar una liquidacion final se confirma la baja del empleado
+function confirmarBajaPorLiquidacionFinal(r) {
+  if (!r || r.tipo !== 'final') return true;
+  var egr = datosEgresoRecibo(r);
+  return confirm('Se va a guardar la liquidacion final de ' + r.empleado.apellido + ', ' + r.empleado.nombre
+    + ' y el empleado quedara dado de baja con fecha ' + egr.fecha + ' (' + labelMotivoEgreso(egr.motivo) + ').\n\nContinuar?');
+}
+
+// Registra la baja en la ficha del empleado (local + nube)
+function registrarBajaEmpleado(r) {
+  var egr = datosEgresoRecibo(r);
+  if (!egr) return;
+  var d = datos();
+  var emp = d.empleados.find(function(x) { return x.id === r.empleado.id; });
+  if (!emp) return;
+  emp.fechaEgreso = egr.fecha;
+  emp.motivoEgreso = egr.motivo;
+  guardarDatos(d);
+  renderEmpleados();
+  poblarSelectEmpleados();
+  renderResumenInicio();
+  guardarEmpleadoEnSupabase(emp, empresaActual);
+}
+
+// Si se borra una liquidacion final, se ofrece reactivar al empleado
+function ofrecerReactivarEmpleado(r) {
+  var egr = datosEgresoRecibo(r);
+  var d = datos();
+  var emp = d.empleados.find(function(x) { return x.id === r.empleado.id; });
+  if (!emp || !emp.fechaEgreso || (egr && emp.fechaEgreso !== egr.fecha)) return;
+  if (!confirm(emp.apellido + ', ' + emp.nombre + ' figura dado de baja por esta liquidacion final. Queres reactivarlo?')) return;
+  emp.fechaEgreso = '';
+  emp.motivoEgreso = '';
+  guardarDatos(d);
+  renderEmpleados();
+  poblarSelectEmpleados();
+  renderResumenInicio();
+  guardarEmpleadoEnSupabase(emp, empresaActual);
 }
 
 var UNID_L = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
@@ -2041,17 +2501,20 @@ function renderReciboHTML(r) {
     formaPagoHTML = '<div class="rp-row"><span class="rp-lbl">Forma de pago - Efectivo</span> &nbsp;&nbsp; <span class="rp-strong">$ ' + fmt(r.neto) + '</span></div>';
   }
 
-  return '<div class="rp-row rp-tit-row">RECIBO DE SUELDO</div>'
+  var egr = datosEgresoRecibo(r);
+  var filaEgreso = egr ? '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Fecha de egreso: </span><span class="rp-strong">' + egr.fecha + '</span></div><div><span class="rp-lbl">Motivo: </span><span class="rp-strong">' + labelMotivoEgreso(egr.motivo) + '</span></div></div>' : '';
+  return '<div class="rp-row rp-tit-row">' + (egr ? 'LIQUIDACION FINAL' : 'RECIBO DE SUELDO') + '</div>'
     + '<div class="rp-row rp-strong">' + r.empleado.apellido.toUpperCase() + ', ' + r.empleado.nombre.toUpperCase() + '</div>'
     + '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Periodo de liquidacion: </span><span class="rp-strong">' + r.periodo + '</span></div><div><span class="rp-lbl">Fecha de pago: </span><span class="rp-strong">' + r.fechaPago + '</span></div></div>'
     + '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Legajo: </span><span class="rp-strong">' + (r.empleado.legajo || '-') + '</span> &nbsp;&nbsp; <span class="rp-lbl">CUIL: </span><span class="rp-strong">' + (r.empleado.cuil || '-') + '</span></div><div><span class="rp-lbl">Puesto: </span><span class="rp-strong">' + (r.empleado.puesto || '-') + '</span></div></div>'
     + '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Fecha de ingreso: </span><span class="rp-strong">' + r.empleado.ingreso + '</span></div><div><span class="rp-lbl">Antiguedad: </span><span class="rp-strong">' + r.antiguedad + '</span></div></div>'
+    + filaEgreso
     + '<div class="rp-row" style="padding:0;"><table class="rp-tabla"><thead><tr><th style="width:8%">Cod.</th><th style="width:32%">Concepto</th><th class="r" style="width:12%">Unidades</th><th class="r" style="width:24%">Haberes</th><th class="r" style="width:24%">Descuentos</th></tr></thead><tbody>' + filas + '</tbody></table></div>'
     + '<div class="rp-footer">'
     + formaPagoHTML
     + '<div class="rp-neto-row"><div class="rp-neto-box">NETO A COBRAR: $ ' + fmt(r.neto) + '</div></div>'
     + '<div class="rp-enletras">' + montoEnLetras(r.neto) + '</div>'
-    + '<div class="rp-firma2"><div class="col1">Recibi conforme el importe de la<br>presente liquidacion.</div><div class="col2"><div class="linea2"></div>Firma y aclaracion del empleado</div></div>'
+    + '<div class="rp-firma2"><div class="col1">Recibi conforme el importe de la<br>presente liquidacion' + (egr ? ' final' : '') + '.</div><div class="col2"><div class="linea2"></div>Firma y aclaracion del empleado</div></div>'
     + '</div>';
 }
 
@@ -2063,11 +2526,13 @@ function guardarEnHistorial(r) {
   d.recibos.unshift(r);
   guardarDatos(d);
   guardarReciboEnSupabase(r, empresaActual);
+  if (r.tipo === 'final') registrarBajaEmpleado(r);
 }
 
 function generarRecibo() {
   var r = armarDatosRecibo();
   if (!r) return;
+  if (!confirmarBajaPorLiquidacionFinal(r)) return;
   document.getElementById('recibo-preview').innerHTML = '<div class="recibo-print">' + renderReciboHTML(r) + '</div>';
   window.print();
   guardarEnHistorial(r);
@@ -2082,6 +2547,7 @@ function guardarRecibo() {
   if (yaExiste) {
     if (!confirm('Ya existe un recibo de ' + r.empleado.apellido + ' para el periodo ' + r.periodo + '. Guardar de todas formas?')) return;
   }
+  if (!confirmarBajaPorLiquidacionFinal(r)) return;
   guardarEnHistorial(r);
   alert('Recibo guardado correctamente.');
 }
@@ -2104,12 +2570,14 @@ function exportarWord() {
   }
 
   var html = '<html><head><meta charset="UTF-8"><style>body{font-family:Calibri,Arial,sans-serif;font-size:12px;margin:20mm;}table{width:100%;border-collapse:collapse;}h2{font-size:14px;}p{margin:4px 0;}</style></head><body>';
-  html += '<h2>Recibo de haberes</h2>';
+  var egrW = datosEgresoRecibo(r);
+  html += '<h2>' + (egrW ? 'Liquidacion final' : 'Recibo de haberes') + '</h2>';
   html += '<p><strong>Periodo:</strong> ' + r.periodo + ' &nbsp;&nbsp; <strong>Fecha de pago:</strong> ' + r.fechaPago + '</p>';
   html += '<hr>';
   html += '<p><strong>Apellido y nombre:</strong> ' + r.empleado.apellido + ', ' + r.empleado.nombre + '</p>';
   html += '<p><strong>CUIL:</strong> ' + (r.empleado.cuil || '-') + ' &nbsp;&nbsp; <strong>Legajo:</strong> ' + (r.empleado.legajo || '-') + '</p>';
   html += '<p><strong>Puesto:</strong> ' + (r.empleado.puesto || '-') + ' &nbsp;&nbsp; <strong>Ingreso:</strong> ' + r.empleado.ingreso + ' &nbsp;&nbsp; <strong>Antiguedad:</strong> ' + r.antiguedad + '</p>';
+  if (egrW) html += '<p><strong>Fecha de egreso:</strong> ' + egrW.fecha + ' &nbsp;&nbsp; <strong>Motivo:</strong> ' + labelMotivoEgreso(egrW.motivo) + '</p>';
   html += '<br><table><thead><tr><th style="border:1px solid #ccc;padding:4px 8px;background:#eee;text-align:left;">Concepto</th><th style="border:1px solid #ccc;padding:4px 8px;background:#eee;text-align:right;">Unidades</th><th style="border:1px solid #ccc;padding:4px 8px;background:#eee;text-align:right;">Haberes</th><th style="border:1px solid #ccc;padding:4px 8px;background:#eee;text-align:right;">Descuentos</th></tr></thead><tbody>' + filas + '</tbody></table>';
   html += '<p style="margin-top:10px;"><strong>Total haberes:</strong> $ ' + fmt(r.totalHaberes) + ' &nbsp;&nbsp; <strong>Total descuentos:</strong> $ ' + fmt(r.totalDesc) + ' &nbsp;&nbsp; <strong>Neto a cobrar:</strong> $ ' + fmt(r.neto) + '</p>';
   html += divisionHTML;
@@ -2194,7 +2662,8 @@ function exportarWordMasivo() {
 
 function empleadosMasivo(d) {
   var filtroSuc = document.getElementById('mas-sucursal') ? document.getElementById('mas-sucursal').value : '';
-  return d.empleados.filter(function(e) { return !filtroSuc || e.sucursal === filtroSuc; });
+  // Los dados de baja no entran en la impresion masiva
+  return d.empleados.filter(function(e) { return (!filtroSuc || e.sucursal === filtroSuc) && empleadoActivo(e); });
 }
 
 function verificarMasivo() {
@@ -2372,7 +2841,7 @@ function renderHistorial() {
   if (!recibos.length) { wrap.innerHTML = '<div class="empty-state">No hay recibos que coincidan.</div>'; return; }
   var html = '<div style="overflow-x:auto;"><table class="tabla"><thead><tr><th>Empleado</th><th>Periodo</th><th>Tipo</th><th>Neto</th><th>Guardado</th><th></th></tr></thead><tbody>';
   recibos.forEach(function(r) {
-    var badge = r.tipo === 'sac' ? '<span class="badge badge-sac">SAC</span>' : '<span class="badge badge-hab">Haberes</span>';
+    var badge = r.tipo === 'sac' ? '<span class="badge badge-sac">SAC</span>' : (r.tipo === 'final' ? '<span class="badge badge-final">Liq. final</span>' : '<span class="badge badge-hab">Haberes</span>');
     html += '<tr><td><strong>' + r.empleado.apellido + ', ' + r.empleado.nombre + '</strong></td><td>' + r.periodo + '</td><td>' + badge + '</td><td><strong>$ ' + fmt(r.neto) + '</strong></td><td>' + r.fecha_guardado + '</td><td style="white-space:nowrap;"><button class="btn btn-sm" onclick="reimprimir(\'' + r.id + '\')">Imprimir</button> <button class="btn btn-sm btn-danger" onclick="eliminarRecibo(\'' + r.id + '\')">Eliminar</button></td></tr>';
   });
   html += '</tbody></table></div>';
@@ -2389,10 +2858,12 @@ function reimprimir(id) {
 function eliminarRecibo(id) {
   if (!confirm('Eliminar este recibo?')) return;
   var d = datos();
+  var reciboBorrado = (d.recibos || []).find(function(r) { return r.id === id; });
   d.recibos = (d.recibos || []).filter(function(r) { return r.id !== id; });
   guardarDatos(d);
   renderHistorial();
   eliminarReciboEnSupabase(id);
+  if (reciboBorrado && reciboBorrado.tipo === 'final') ofrecerReactivarEmpleado(reciboBorrado);
 }
 
 function exportarParaNotificaciones() {
@@ -2944,4 +3415,3 @@ function generarReciboDesdeLiquidacion(id) {
 }
 </script>
 </body>
-</html>
