@@ -83,6 +83,28 @@ body { font-family: Arial, sans-serif; background: #f0f0f0; color: #111; min-hei
 .badge-desc { background: #fdeaea; color: #a12626; }
 .badge-off { background: #eee; color: #999; }
 .badge-final { background: #fff4e5; color: #9a5b00; }
+/* Importar liquidacion desde Excel */
+.badge-ok { background: #e8f5e9; color: #1a6b3a; }
+.badge-warn { background: #fff4e5; color: #9a5b00; }
+.import-ayuda { font-size: 13px; color: #666; margin: -4px 0 14px; }
+.import-textarea { width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; font-family: inherit; resize: vertical; }
+.import-resumen { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 16px 0 12px; text-align: center; }
+.import-resumen > div { background: #f8f8f8; border-radius: 8px; padding: 12px; }
+.import-resumen .num { font-size: 22px; font-weight: 700; color: #111; }
+.import-resumen .lbl { font-size: 12px; color: #666; margin-top: 2px; }
+.import-aviso-global { background: #fff4e5; border: 1px solid #f3d19c; color: #7a4a00; border-radius: 6px; padding: 10px 14px; font-size: 12px; margin-bottom: 10px; }
+.import-ok-global { background: #e8f5e9; border: 1px solid #b9dfc0; color: #1a6b3a; border-radius: 6px; padding: 12px 14px; font-size: 13px; margin-top: 14px; }
+.tabla-import td, .tabla-import th { font-size: 12px; vertical-align: top; }
+.tabla-import td.r, .tabla-import th.r { text-align: right; white-space: nowrap; }
+.tabla-import select { padding: 5px 6px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; width: 165px; }
+.tabla-import td, .tabla-import th { padding-left: 7px; padding-right: 7px; }
+.tabla-import td.col-nombre { min-width: 170px; }
+.tabla-import .obs { font-size: 11px; color: #888; margin-top: 2px; max-width: 280px; }
+.tabla-import tr.fila-detalle td { border-top: none; padding-top: 0; }
+.tabla-import tr.tiene-detalle td { border-bottom: none; }
+.tabla-import .aviso { font-size: 11px; color: #9a5b00; margin-top: 3px; }
+.tabla-import .bloq { font-size: 11px; color: #a12626; margin-top: 3px; }
+.tabla-import tr.fila-off td { color: #aaa; }
 .badge-baja { background: #fdeaea; color: #a12626; }
 /* Liquidacion final: filas de rubros editables */
 .rubro-final-head, .rubro-final-row { display: grid; grid-template-columns: 1fr 110px 90px 140px 36px; gap: 8px; align-items: center; }
@@ -363,6 +385,41 @@ tr.emp-baja td { color: #999; }
     </div>
 
     <div class="section" id="tab-masivo">
+      <div class="card" id="card-import-planilla">
+        <div class="card-title">Importar liquidación desde Excel 📥</div>
+        <p class="import-ayuda">Subí la planilla del mes tal como la liquidás. NEXO lee cada fila, la vincula con el empleado y arma los recibos listos para imprimir.</p>
+        <div class="form-row3">
+          <div class="field"><label>Mes liquidado</label>
+            <select id="imp-mes" onchange="onPeriodoImportChange()">
+              <option value="Enero">Enero</option><option value="Febrero">Febrero</option><option value="Marzo">Marzo</option>
+              <option value="Abril">Abril</option><option value="Mayo">Mayo</option><option value="Junio">Junio</option>
+              <option value="Julio">Julio</option><option value="Agosto">Agosto</option><option value="Septiembre">Septiembre</option>
+              <option value="Octubre">Octubre</option><option value="Noviembre">Noviembre</option><option value="Diciembre">Diciembre</option>
+            </select>
+          </div>
+          <div class="field"><label>Año</label>
+            <select id="imp-anio" onchange="onPeriodoImportChange()">
+              <option value="2025">2025</option><option value="2026">2026</option><option value="2027">2027</option><option value="2028">2028</option>
+            </select>
+          </div>
+          <div class="field"><label>Fecha de pago</label><input type="text" id="imp-fecha-pago" placeholder="DD/MM/AAAA"></div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-dark" onclick="document.getElementById('imp-archivo').click()">Elegir planilla (.xlsx / .csv)</button>
+          <input type="file" id="imp-archivo" accept=".xlsx,.xls,.csv" style="display:none" onchange="onArchivoPlanilla(event)">
+          <button class="btn" onclick="togglePegarPlanilla()">Pegar desde Excel</button>
+          <span id="imp-archivo-nombre" style="font-size:12px; color:#666;"></span>
+        </div>
+        <div id="imp-pegar-wrap" style="display:none; margin-top:12px;">
+          <textarea id="imp-pegar" class="import-textarea" rows="6" placeholder="En Excel, seleccioná desde el encabezado (NOMBRE Y APELLIDO...) hasta la última fila, copiá y pegá acá."></textarea>
+          <button class="btn btn-sm" style="margin-top:6px;" onclick="procesarPegadoPlanilla()">Leer datos pegados</button>
+        </div>
+        <div id="imp-hoja-wrap" class="field" style="display:none; margin-top:12px; max-width:320px;"><label>Hoja de la planilla</label>
+          <select id="imp-hoja" onchange="leerHojaSeleccionada()"></select>
+        </div>
+        <div id="imp-resultado"></div>
+      </div>
+
       <div class="card">
         <div class="card-title">Impresion masiva - 2 recibos por hoja A4</div>
         <div class="form-row">
@@ -1137,7 +1194,8 @@ function reciboASupabase(r, empresaId) {
     fecha_guardado: new Date().toISOString(),
     tipo: r.tipo || '',
     total_haberes: r.totalHaberes,
-    total_descuentos: r.totalDesc
+    total_descuentos: r.totalDesc,
+    forma_pago: r.formaPago || null
   };
   var items = (r.conceptos || []).map(function(c, idx) {
     return {
@@ -1157,7 +1215,7 @@ function reciboASupabase(r, empresaId) {
 // Supabase y sus items.
 function reciboDeSupabase(row, items) {
   items = items.slice().sort(function(a, b) { return (a.orden || 0) - (b.orden || 0); });
-  return {
+  var recibo = {
     id: row.id,
     tipo: row.tipo || '',
     empleado: row.empleado_snapshot || {},
@@ -1174,6 +1232,9 @@ function reciboDeSupabase(row, items) {
       return { nombre: it.nombre, tipo: it.tipo, unidades: it.unidades, importe: it.importe };
     })
   };
+  // Forma de pago importada desde planilla (solo si la tabla ya tiene la columna)
+  if (row.forma_pago) recibo.formaPago = row.forma_pago;
+  return recibo;
 }
 
 // Trae los recibos de una empresa (con sus items) desde Supabase y
@@ -1199,9 +1260,19 @@ async function sincronizarRecibosDesdeSupabase(empresaId) {
       });
     }
     var d = datosEmpresa(empresaId);
-    d.recibos = resRec.data.map(function(row) {
-      return reciboDeSupabase(row, itemsPorRecibo[row.id] || []);
+    // Se combinan con la copia local: se conservan los datos que solo viven en
+    // esta computadora (ej. forma de pago si la nube no tiene esa columna) y
+    // los recibos que todavia no llegaron a la nube, para no perder ninguno.
+    var localPorId = {};
+    (d.recibos || []).forEach(function(r) { localPorId[r.id] = r; });
+    var idsRemotos = {};
+    var remotos = resRec.data.map(function(row) {
+      idsRemotos[row.id] = true;
+      var remoto = reciboDeSupabase(row, itemsPorRecibo[row.id] || []);
+      return localPorId[row.id] ? Object.assign({}, localPorId[row.id], remoto) : remoto;
     });
+    var soloLocales = (d.recibos || []).filter(function(r) { return !idsRemotos[r.id]; });
+    d.recibos = soloLocales.concat(remotos);
     guardarDatosEmpresa(empresaId, d);
     recibosSincronizados[empresaId] = true;
     if (empresaId === empresaActual) renderHistorial();
@@ -1211,11 +1282,19 @@ async function sincronizarRecibosDesdeSupabase(empresaId) {
 }
 
 // Sube (inserta o actualiza) un recibo y sus items en Supabase.
-async function guardarReciboEnSupabase(r, empresaId) {
-  if (!sb) return;
+// silencioso = true: no muestra alerta (lo usa la subida en lote, que avisa una sola vez).
+// Devuelve true si se guardo en la nube.
+async function guardarReciboEnSupabase(r, empresaId, silencioso) {
+  if (!sb) return false;
   try {
     var datosR = reciboASupabase(r, empresaId);
     var res1 = await sb.from('recibos').upsert(datosR.fila);
+    if (res1.error && /forma_pago/.test((res1.error.message || '') + ' ' + (res1.error.details || ''))) {
+      // La tabla todavia no tiene la columna forma_pago: se guarda igual sin ella.
+      console.warn('Supabase: falta la columna forma_pago en recibos. La forma de pago queda guardada solo en esta computadora.');
+      delete datosR.fila.forma_pago;
+      res1 = await sb.from('recibos').upsert(datosR.fila);
+    }
     if (res1.error) throw res1.error;
     var res2 = await sb.from('recibo_items').delete().eq('recibo_id', r.id);
     if (res2.error) throw res2.error;
@@ -1225,8 +1304,21 @@ async function guardarReciboEnSupabase(r, empresaId) {
     }
   } catch (err) {
     console.error('No se pudo guardar el recibo en Supabase:', err);
-    alert('El recibo se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet y avisale a Claude si se repite.');
+    if (!silencioso) alert('El recibo se guardo en esta computadora, pero no se pudo sincronizar con la nube. Revisa tu conexion a internet y avisale a Claude si se repite.');
+    return false;
   }
+  return true;
+}
+
+// Sube varios recibos a la nube, uno por uno, y avisa una sola vez si alguno fallo.
+async function subirRecibosEnLote(recibos, empresaId) {
+  if (!sb || !recibos.length) return;
+  var fallidos = 0;
+  for (var i = 0; i < recibos.length; i++) {
+    var ok = await guardarReciboEnSupabase(recibos[i], empresaId, true);
+    if (!ok) fallidos++;
+  }
+  if (fallidos) alert(fallidos + ' de ' + recibos.length + ' recibo(s) se guardaron en esta computadora, pero no se pudieron sincronizar con la nube. Revisa tu conexion a internet y avisale a Claude si se repite.');
 }
 
 // Borra un recibo y sus items en Supabase.
@@ -1555,7 +1647,7 @@ function showTab(tab) {
   if (tab === 'empleados') renderEmpleados();
   if (tab === 'historial') { renderHistorial(); sincronizarRecibosDesdeSupabase(empresaActual); }
   if (tab === 'generar') poblarSelectEmpleados();
-  if (tab === 'masivo') verificarMasivo();
+  if (tab === 'masivo') { verificarMasivo(); initImportPlanilla(); }
   if (tab === 'inicio') renderResumenInicio();
   if (tab === 'liquidaciones') initLiquidaciones();
   if (tab === 'config') { renderConceptosConfig(); sincronizarConceptosDesdeSupabase(empresaActual); renderSucursalesConfig(); sincronizarSucursalesDesdeSupabase(empresaActual); }
@@ -2443,6 +2535,494 @@ function ofrecerReactivarEmpleado(r) {
   guardarEmpleadoEnSupabase(emp, empresaActual);
 }
 
+/* ============================================================
+   IMPORTAR LIQUIDACION DESDE EXCEL (Impresion masiva)
+   Lee la planilla de sueldos (.xlsx/.csv o pegada desde Excel), vincula
+   cada fila con un empleado, valida que cierre y arma los recibos.
+   ============================================================ */
+var XLSX_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+var importPlanilla = { filas: [], columnasIgnoradas: [], totalNetoPlanilla: null, wb: null, hojas: [] };
+var importInicializado = false;
+
+// Columnas reconocidas de la planilla. El orden importa: se evalua de arriba
+// hacia abajo (ej. "SUELDO NETO" tiene que caer en neto y no en sueldo).
+var COLUMNAS_PLANILLA = [
+  { campo: 'nombre', test: function(h) { return /NOMBRE|APELLIDO|EMPLEADO/.test(h); } },
+  { campo: 'sucursal', test: function(h) { return /^SUCURSAL/.test(h); } },
+  { campo: 'area', test: function(h) { return /^AREA|^SECTOR|^PUESTO/.test(h); } },
+  { campo: 'neto', test: function(h) { return /NETO/.test(h); } },
+  { campo: 'transferencia', test: function(h) { return /^TRANSF/.test(h); } },
+  { campo: 'efectivo', test: function(h) { return /^EFECTIVO/.test(h); } },
+  { campo: 'flagTransf', test: function(h) { return h === 'T'; } },
+  { campo: 'obs', test: function(h) { return /^OBSERV/.test(h); } },
+  { concepto: 'Sueldo básico', tipo: 'haber', test: function(h) { return /SUELDO|BASICO/.test(h); } },
+  { concepto: 'Descuento por día', tipo: 'descuento', test: function(h) { return /DESC.*DIA/.test(h); } },
+  { concepto: 'Embargo', tipo: 'descuento', test: function(h) { return /EMBARGO/.test(h); } },
+  { concepto: 'Faltante de caja', tipo: 'descuento', test: function(h) { return /FALTANTE/.test(h); } },
+  { concepto: 'Domingo trabajado', tipo: 'haber', test: function(h) { return /DOMINGO/.test(h); } },
+  { concepto: 'Feriado', tipo: 'haber', test: function(h) { return /FERIADO/.test(h); } },
+  { concepto: 'Cuota alimentaria', tipo: 'descuento', test: function(h) { return /ALIMENT/.test(h); } },
+  { concepto: 'Horas extra', tipo: 'haber', test: function(h) { return /^HHEE$|^HS EX|HORAS EXTRA|^HE$/.test(h); } },
+  { concepto: 'Adelanto', tipo: 'descuento', test: function(h) { return /ADELANTO/.test(h); } },
+  { concepto: 'Monotributo', tipo: 'haber', test: function(h) { return /MONOTRIBUTO/.test(h); } },
+  { concepto: 'Cuenta corriente', tipo: 'descuento', test: function(h) { return /CUENTA CORRIENTE|CTA CTE/.test(h); } }
+];
+
+function normalizarTexto(s) {
+  return String(s === null || s === undefined ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+}
+
+function escHTML(s) {
+  return String(s === null || s === undefined ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Convierte un valor de la planilla en numero. Acepta numeros de Excel y
+// textos como " $ 2.090.000,00 ", " $ -   " (cero) o "-$ 199.168,92".
+// Devuelve NaN si el texto no es un importe.
+function parseMonto(v) {
+  if (typeof v === 'number') return v;
+  var s = String(v === null || v === undefined ? '' : v).replace(/[$\s ]/g, '');
+  if (s === '' || s === '-') return 0;
+  var neg = false;
+  if (s.charAt(0) === '-') { neg = true; s = s.slice(1); }
+  if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+  else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
+  else if (/^\d{1,3}\.\d{3}$/.test(s)) s = s.replace('.', '');
+  if (!/^\d*\.?\d+$/.test(s)) return NaN;
+  var n = parseFloat(s);
+  return neg ? -n : n;
+}
+
+function redondearImporte(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function initImportPlanilla() {
+  if (importInicializado) return;
+  importInicializado = true;
+  // Por defecto, el mes anterior (la planilla se arma al cerrar el mes)
+  var hoy = new Date();
+  var ref = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  document.getElementById('imp-mes').value = MESES_NOMBRE[ref.getMonth()];
+  var selAnio = document.getElementById('imp-anio');
+  if (![].slice.call(selAnio.options).some(function(o) { return o.value === String(ref.getFullYear()); })) {
+    selAnio.innerHTML += '<option value="' + ref.getFullYear() + '">' + ref.getFullYear() + '</option>';
+  }
+  selAnio.value = String(ref.getFullYear());
+}
+
+function periodoImportActual() {
+  return document.getElementById('imp-mes').value + ' ' + document.getElementById('imp-anio').value;
+}
+
+function onPeriodoImportChange() {
+  if (!importPlanilla.filas.length) return;
+  importPlanilla.filas.forEach(function(f) { evaluarFilaImport(f, true); });
+  renderImportPlanilla();
+}
+
+function togglePegarPlanilla() {
+  var w = document.getElementById('imp-pegar-wrap');
+  w.style.display = w.style.display === 'none' ? 'block' : 'none';
+  if (w.style.display === 'block') document.getElementById('imp-pegar').focus();
+}
+
+// Carga la libreria de Excel (SheetJS) solo cuando se necesita
+function cargarLibreriaExcel() {
+  return new Promise(function(resolve, reject) {
+    if (window.XLSX) return resolve(window.XLSX);
+    var s = document.createElement('script');
+    s.src = XLSX_CDN;
+    s.onload = function() { window.XLSX ? resolve(window.XLSX) : reject(new Error('XLSX no disponible')); };
+    s.onerror = function() { reject(new Error('No se pudo cargar la libreria de Excel')); };
+    document.head.appendChild(s);
+  });
+}
+
+function mostrarMensajeImport(html) {
+  document.getElementById('imp-resultado').innerHTML = html;
+}
+
+async function onArchivoPlanilla(event) {
+  var archivo = event.target.files[0];
+  event.target.value = ''; // permite volver a elegir el mismo archivo
+  if (!archivo) return;
+  document.getElementById('imp-archivo-nombre').textContent = archivo.name;
+  document.getElementById('imp-hoja-wrap').style.display = 'none';
+  mostrarMensajeImport('<div class="empty-state" style="padding:20px;">Leyendo planilla...</div>');
+  try {
+    var XLSX = await cargarLibreriaExcel();
+    var buffer = await archivo.arrayBuffer();
+    var wb = XLSX.read(buffer, { type: 'array' });
+    importPlanilla.wb = wb;
+    // Hojas que tienen el encabezado de la planilla de sueldos
+    importPlanilla.hojas = wb.SheetNames.filter(function(n) {
+      return buscarFilaEncabezado(hojaAMatriz(wb.Sheets[n])) >= 0;
+    });
+    if (!importPlanilla.hojas.length) {
+      mostrarMensajeImport('<div class="import-aviso-global">No encontré el encabezado de la planilla (una fila con "NOMBRE Y APELLIDO" y "SUELDO NETO"). Revisá que sea la planilla de sueldos.</div>');
+      return;
+    }
+    var sel = document.getElementById('imp-hoja');
+    sel.innerHTML = importPlanilla.hojas.map(function(n) { return '<option value="' + escAttr(n) + '">' + escHTML(n) + '</option>'; }).join('');
+    document.getElementById('imp-hoja-wrap').style.display = importPlanilla.hojas.length > 1 ? 'block' : 'none';
+    leerHojaSeleccionada();
+  } catch (err) {
+    console.error('Error leyendo la planilla:', err);
+    mostrarMensajeImport('<div class="import-aviso-global">No se pudo leer el archivo. Si el problema sigue, usá <strong>Pegar desde Excel</strong>: copiá la planilla y pegala.</div>');
+  }
+}
+
+function hojaAMatriz(ws) {
+  return window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+}
+
+function leerHojaSeleccionada() {
+  var nombre = document.getElementById('imp-hoja').value;
+  procesarMatrizPlanilla(hojaAMatriz(importPlanilla.wb.Sheets[nombre]));
+}
+
+function procesarPegadoPlanilla() {
+  var texto = document.getElementById('imp-pegar').value;
+  if (!texto.trim()) { alert('Pegá primero los datos copiados desde Excel.'); return; }
+  document.getElementById('imp-archivo-nombre').textContent = 'Datos pegados';
+  document.getElementById('imp-hoja-wrap').style.display = 'none';
+  var matriz = texto.replace(/\r/g, '').split('\n').map(function(l) { return l.split('\t'); });
+  procesarMatrizPlanilla(matriz);
+}
+
+function buscarFilaEncabezado(matriz) {
+  for (var i = 0; i < Math.min(matriz.length, 30); i++) {
+    var celdas = (matriz[i] || []).map(normalizarTexto);
+    var tieneNombre = celdas.some(function(c) { return /NOMBRE|APELLIDO/.test(c); });
+    var tieneNeto = celdas.some(function(c) { return /NETO/.test(c); });
+    if (tieneNombre && tieneNeto) return i;
+  }
+  return -1;
+}
+
+// Interpreta la planilla (matriz de filas y celdas) y arma las filas a importar
+function procesarMatrizPlanilla(matriz) {
+  var filaEnc = buscarFilaEncabezado(matriz);
+  if (filaEnc < 0) {
+    mostrarMensajeImport('<div class="import-aviso-global">No encontré el encabezado de la planilla (una fila con "NOMBRE Y APELLIDO" y "SUELDO NETO"). Copiá desde la fila de títulos.</div>');
+    return;
+  }
+  // Mapa de columnas
+  var d = datos();
+  var conceptosConfig = {};
+  (d.conceptos || []).forEach(function(c) { if (c.nombre) conceptosConfig[normalizarTexto(c.nombre)] = c; });
+  var mapa = [];
+  var ignoradas = [];
+  (matriz[filaEnc] || []).forEach(function(titulo, col) {
+    var h = normalizarTexto(titulo);
+    if (!h) return;
+    var regla = COLUMNAS_PLANILLA.find(function(r) { return r.test(h); });
+    if (regla) {
+      if (regla.campo && mapa.some(function(m) { return m.campo === regla.campo; })) return; // solo la primera
+      mapa.push({ col: col, campo: regla.campo, concepto: regla.concepto, tipo: regla.tipo, titulo: String(titulo).trim() });
+    } else if (conceptosConfig[h]) {
+      // Columna con el nombre de un concepto configurado en NEXO
+      var c = conceptosConfig[h];
+      mapa.push({ col: col, concepto: c.nombre, tipo: c.tipo === 'descuento' ? 'descuento' : 'haber', titulo: String(titulo).trim() });
+    } else {
+      ignoradas.push({ col: col, titulo: String(titulo).trim() });
+    }
+  });
+  var colNombre = mapa.find(function(m) { return m.campo === 'nombre'; });
+  var cols = function(campo) { return mapa.find(function(m) { return m.campo === campo; }); };
+  var colsConcepto = mapa.filter(function(m) { return m.concepto; });
+
+  var filas = [];
+  var totalNetoPlanilla = null;
+  for (var i = filaEnc + 1; i < matriz.length; i++) {
+    var fila = matriz[i] || [];
+    var nombre = String(fila[colNombre.col] === undefined ? '' : fila[colNombre.col]).trim();
+    if (!nombre) continue;
+    var nombreNorm = normalizarTexto(nombre);
+    if (/^TOTAL/.test(nombreNorm)) {
+      if (cols('neto')) totalNetoPlanilla = parseMonto(fila[cols('neto').col]);
+      break; // despues de los totales solo hay notas
+    }
+    var avisosValor = [];
+    var leer = function(m) {
+      if (!m) return null;
+      var crudo = fila[m.col];
+      var n = parseMonto(crudo);
+      if (isNaN(n)) { avisosValor.push('Valor no numérico en ' + m.titulo + ': "' + String(crudo).trim() + '"'); return 0; }
+      return n;
+    };
+    var conceptosFila = [];
+    var haberes = 0, descuentos = 0;
+    colsConcepto.forEach(function(m) {
+      var v = leer(m);
+      if (!v) return;
+      var importe = Math.abs(v);
+      // un importe negativo invierte el tipo (ej. un descuento cargado en negativo)
+      var tipo = v < 0 ? (m.tipo === 'haber' ? 'descuento' : 'haber') : m.tipo;
+      conceptosFila.push({ nombre: m.concepto, tipo: tipo, importe: redondearImporte(importe) });
+      if (tipo === 'haber') haberes += importe; else descuentos += importe;
+    });
+    var transf = leer(cols('transferencia'));
+    var efect = leer(cols('efectivo'));
+    filas.push({
+      idx: filas.length,
+      filaExcel: i + 1,
+      nombrePlanilla: nombre,
+      nombreNorm: nombreNorm,
+      sucursal: cols('sucursal') ? String(fila[cols('sucursal').col] || '').trim() : '',
+      obs: cols('obs') ? String(fila[cols('obs').col] || '').trim() : '',
+      conceptos: conceptosFila,
+      haberes: redondearImporte(haberes),
+      descuentos: redondearImporte(descuentos),
+      netoCalc: redondearImporte(haberes - descuentos),
+      netoPlanilla: cols('neto') ? leer(cols('neto')) : null,
+      transf: transf === null ? null : redondearImporte(transf),
+      efect: efect === null ? null : redondearImporte(efect),
+      avisosValor: avisosValor,
+      empId: '',
+      match: 'ninguno',
+      incluir: false,
+      incluirManual: null
+    });
+  }
+  // Columnas no reconocidas que tienen importes: se avisan (no entran al recibo)
+  importPlanilla.columnasIgnoradas = ignoradas.filter(function(ig) {
+    for (var j = filaEnc + 1; j < matriz.length; j++) {
+      var n = parseMonto((matriz[j] || [])[ig.col]);
+      if (!isNaN(n) && n !== 0) return true;
+    }
+    return false;
+  }).map(function(ig) { return ig.titulo; });
+  importPlanilla.filas = filas;
+  importPlanilla.totalNetoPlanilla = (totalNetoPlanilla === null || isNaN(totalNetoPlanilla)) ? null : totalNetoPlanilla;
+  vincularEmpleadosImport();
+  filas.forEach(function(f) { evaluarFilaImport(f, true); });
+  renderImportPlanilla();
+}
+
+// Busca el empleado de cada fila por nombre (tolera orden distinto, tildes y espacios)
+function vincularEmpleadosImport() {
+  var emps = datos().empleados || [];
+  importPlanilla.filas.forEach(function(f) {
+    var tokP = f.nombreNorm.split(' ');
+    var mejor = null, mejorScore = 0, empate = false;
+    emps.forEach(function(e) {
+      var score = 0;
+      if (e.nombrePlanilla && e.nombrePlanilla === f.nombreNorm) score = 100;
+      else {
+        var tokE = normalizarTexto((e.apellido || '') + ' ' + (e.nombre || '')).split(' ').filter(Boolean);
+        var tokApe = normalizarTexto(e.apellido).split(' ').filter(Boolean);
+        var inter = tokE.filter(function(t) { return tokP.indexOf(t) >= 0; }).length;
+        var apeOk = tokApe.length && tokApe.every(function(t) { return tokP.indexOf(t) >= 0; });
+        if (inter === tokE.length && inter === tokP.length) score = 90;
+        else if (apeOk && inter >= 2 && (inter === tokE.length || inter === tokP.length)) score = 70;
+        else if (apeOk && inter >= 2) score = 50;
+        else if (inter >= 2) score = 30;
+        if (score && empleadoActivo(e)) score += 5; // ante la duda, se prefiere un empleado activo
+      }
+      if (score > mejorScore) { mejor = e; mejorScore = score; empate = false; }
+      else if (score && score === mejorScore) empate = true;
+    });
+    if (mejor && mejorScore >= 50 && !empate) { f.empId = mejor.id; f.match = mejorScore >= 100 ? 'recordado' : 'auto'; }
+    else if (mejor && !empate) { f.empId = mejor.id; f.match = 'sugerido'; }
+    else { f.empId = ''; f.match = empate ? 'ambiguo' : 'ninguno'; }
+  });
+}
+
+// Calcula avisos y bloqueos de una fila. resetIncluir = vuelve a la seleccion sugerida.
+function evaluarFilaImport(f, resetIncluir) {
+  var d = datos();
+  var e = f.empId ? d.empleados.find(function(x) { return x.id === f.empId; }) : null;
+  var avisos = f.avisosValor.slice();
+  var bloqueo = '';
+  if (!f.haberes && !f.descuentos) bloqueo = 'Sin importes: no se genera recibo.';
+  else if (f.netoCalc <= 0) bloqueo = 'El neto da cero o negativo: revisá la fila.';
+  else if (!e) bloqueo = f.match === 'ambiguo' ? 'Hay más de un empleado posible: elegilo.' : 'No encontré al empleado: elegilo de la lista.';
+  if (e) {
+    if (f.match === 'sugerido') avisos.push('Coincidencia parcial de nombre: verificá que sea el empleado correcto.');
+    if (!empleadoActivo(e)) avisos.push('Figura dado de baja el ' + e.fechaEgreso + '.');
+    var repetida = importPlanilla.filas.some(function(o) { return o !== f && o.empId === f.empId; });
+    if (repetida) avisos.push('Este empleado está asignado a más de una fila.');
+    var periodo = periodoImportActual();
+    var yaTiene = (d.recibos || []).some(function(r) { return r.empleado && r.empleado.id === e.id && r.periodo === periodo; });
+    if (yaTiene) avisos.push('Ya tiene un recibo de ' + periodo + ' en el historial.');
+  }
+  if (f.netoPlanilla !== null && Math.abs(f.netoPlanilla - f.netoCalc) >= 1) {
+    avisos.push('No cierra: la planilla dice $ ' + fmt(f.netoPlanilla) + ' pero los conceptos dan $ ' + fmt(f.netoCalc) + ' (diferencia $ ' + fmt(f.netoPlanilla - f.netoCalc) + ').');
+  } else if (f.transf !== null && f.efect !== null && Math.abs(f.transf + f.efect - f.netoCalc) >= 1 && !bloqueo) {
+    avisos.push('Transferencia + efectivo ($ ' + fmt(f.transf + f.efect) + ') no coincide con el neto.');
+  }
+  f.avisos = avisos;
+  f.bloqueo = bloqueo;
+  if (resetIncluir) f.incluirManual = null;
+  f.incluir = !bloqueo && (f.incluirManual !== null ? f.incluirManual : avisos.length === 0);
+}
+
+function asignarEmpleadoImport(idx, empId) {
+  var f = importPlanilla.filas[idx];
+  f.empId = empId;
+  f.match = empId ? 'manual' : 'ninguno';
+  // al cambiar una asignacion pueden cambiar los avisos de "asignado a mas de una fila"
+  importPlanilla.filas.forEach(function(o) { evaluarFilaImport(o, o === f); });
+  renderImportPlanilla();
+}
+
+function toggleIncluirImport(idx, valor) {
+  var f = importPlanilla.filas[idx];
+  if (f.bloqueo) return;
+  f.incluirManual = valor;
+  f.incluir = valor;
+  renderImportPlanilla();
+}
+
+function seleccionarTodasImport(valor) {
+  importPlanilla.filas.forEach(function(f) { if (!f.bloqueo) { f.incluirManual = valor; f.incluir = valor; } });
+  renderImportPlanilla();
+}
+
+function renderImportPlanilla() {
+  var filas = importPlanilla.filas;
+  if (!filas.length) { mostrarMensajeImport('<div class="import-aviso-global">La planilla no tiene filas con empleados.</div>'); return; }
+  var emps = (datos().empleados || []).slice().sort(function(a, b) { return a.apellido.localeCompare(b.apellido); });
+  var incluidas = filas.filter(function(f) { return f.incluir; });
+  var conAvisos = filas.filter(function(f) { return !f.bloqueo && f.avisos.length; }).length;
+  var bloqueadas = filas.filter(function(f) { return f.bloqueo; }).length;
+  var vinculadas = filas.filter(function(f) { return f.empId; }).length;
+  var netoSel = incluidas.reduce(function(s, f) { return s + f.netoCalc; }, 0);
+  var netoTodas = filas.reduce(function(s, f) { return s + (f.netoPlanilla !== null ? f.netoPlanilla : f.netoCalc); }, 0);
+
+  var html = '<div class="import-resumen">'
+    + '<div><div class="num">' + filas.length + '</div><div class="lbl">Filas en la planilla</div></div>'
+    + '<div><div class="num" style="color:#1a6b3a;">' + incluidas.length + '</div><div class="lbl">Recibos a generar</div></div>'
+    + '<div><div class="num" style="color:' + (conAvisos ? '#9a5b00' : '#1a6b3a') + ';">' + conAvisos + '</div><div class="lbl">Con avisos para revisar</div></div>'
+    + '<div><div class="num" style="color:#888;">' + bloqueadas + '</div><div class="lbl">Sin recibo</div></div>'
+    + '<div><div class="num" style="font-size:16px; padding-top:5px;">$ ' + fmt(netoSel) + '</div><div class="lbl">Neto seleccionado</div></div>'
+    + '</div>';
+
+  var avisosGlobales = [];
+  if (filas.length >= 4 && vinculadas < filas.length / 2) {
+    avisosGlobales.push('Menos de la mitad de las filas coincide con empleados de <strong>' + (empresaActual === 'jeronimo' ? 'Distribuidora Jeronimo' : 'Romaneto') + '</strong>. ¿Estás en la empresa correcta?');
+  }
+  if (importPlanilla.columnasIgnoradas.length) {
+    avisosGlobales.push('Columnas que NEXO no reconoce y no van al recibo: <strong>' + importPlanilla.columnasIgnoradas.map(escHTML).join(', ') + '</strong>. Si son conceptos, creálos en Configuración con el mismo nombre.');
+  }
+  if (importPlanilla.totalNetoPlanilla !== null && Math.abs(importPlanilla.totalNetoPlanilla - netoTodas) >= 1) {
+    avisosGlobales.push('El total neto de la planilla ($ ' + fmt(importPlanilla.totalNetoPlanilla) + ') no coincide con la suma de las filas ($ ' + fmt(netoTodas) + ').');
+  }
+  avisosGlobales.forEach(function(a) { html += '<div class="import-aviso-global">⚠ ' + a + '</div>'; });
+
+  html += '<div style="display:flex; gap:8px; margin:6px 0 8px; flex-wrap:wrap;">'
+    + '<button class="btn btn-sm" onclick="seleccionarTodasImport(true)">Seleccionar todas</button>'
+    + '<button class="btn btn-sm" onclick="seleccionarTodasImport(false)">Quitar todas</button></div>';
+
+  html += '<div style="overflow-x:auto;"><table class="tabla tabla-import"><thead><tr><th></th><th>Planilla</th><th>Empleado en NEXO</th><th class="r">Haberes</th><th class="r">Descuentos</th><th class="r">Neto</th><th class="r">Transf.</th><th class="r">Efectivo</th><th>Estado</th></tr></thead><tbody>';
+  filas.forEach(function(f) {
+    var opts = '<option value="">— Elegir empleado —</option>' + emps.map(function(e) {
+      return '<option value="' + e.id + '"' + (e.id === f.empId ? ' selected' : '') + '>' + escHTML(e.apellido + ', ' + e.nombre) + (empleadoActivo(e) ? '' : ' (baja)') + '</option>';
+    }).join('');
+    var estado = f.bloqueo ? '<span class="badge badge-off">Sin recibo</span>'
+      : (f.avisos.length ? '<span class="badge badge-warn">Revisar</span>' : '<span class="badge badge-ok">OK</span>');
+    // los avisos van en una linea propia debajo de la fila, a todo el ancho
+    var detalle = f.bloqueo ? '<div class="bloq">⛔ ' + f.bloqueo + '</div>'
+      : f.avisos.map(function(a) { return '<div class="aviso">⚠ ' + a + '</div>'; }).join('');
+    var transf = f.transf !== null ? f.transf : 0;
+    var efect = f.transf !== null ? f.netoCalc - transf : f.netoCalc;
+    var clases = (f.incluir ? '' : 'fila-off') + ((f.bloqueo || f.avisos.length) ? ' tiene-detalle' : '');
+    html += '<tr class="' + clases.trim() + '">'
+      + '<td><input type="checkbox"' + (f.incluir ? ' checked' : '') + (f.bloqueo ? ' disabled' : '') + ' onchange="toggleIncluirImport(' + f.idx + ', this.checked)"></td>'
+      + '<td class="col-nombre"><strong>' + escHTML(f.nombrePlanilla) + '</strong>' + (f.sucursal ? ' <span style="color:#999;">· ' + escHTML(f.sucursal) + '</span>' : '') + (f.obs ? '<div class="obs">📝 ' + escHTML(f.obs) + '</div>' : '') + '</td>'
+      + '<td><select onchange="asignarEmpleadoImport(' + f.idx + ', this.value)">' + opts + '</select></td>'
+      + '<td class="r">' + fmt(f.haberes) + '</td>'
+      + '<td class="r">' + fmt(f.descuentos) + '</td>'
+      + '<td class="r"><strong>' + fmt(f.netoCalc) + '</strong></td>'
+      + '<td class="r">' + (transf ? fmt(transf) : '-') + '</td>'
+      + '<td class="r">' + fmt(efect) + '</td>'
+      + '<td>' + estado + '</td></tr>'
+      + (detalle ? '<tr class="fila-detalle' + (f.incluir ? '' : ' fila-off') + '"><td></td><td colspan="8">' + detalle + '</td></tr>' : '');
+  });
+  html += '</tbody></table></div>';
+  html += '<p style="font-size:11px; color:#888; margin-top:8px;">Las observaciones de la planilla son internas: se ven acá pero no se imprimen en el recibo.</p>';
+  html += '<div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">'
+    + '<button class="btn" style="font-size:14px; padding:10px 20px;" onclick="verPreviaImport()">Vista previa</button>'
+    + '<button class="btn btn-green" style="font-size:14px; padding:10px 20px;" onclick="guardarRecibosImportados(true)">Imprimir y guardar ' + incluidas.length + ' recibo' + (incluidas.length === 1 ? '' : 's') + '</button>'
+    + '<button class="btn" onclick="guardarRecibosImportados(false)">Guardar sin imprimir</button>'
+    + '</div>';
+  mostrarMensajeImport(html);
+}
+
+function armarReciboDesdeFilaImport(f, periodo, fechaPago) {
+  var e = datos().empleados.find(function(x) { return x.id === f.empId; });
+  var neto = f.netoCalc;
+  var recibo = {
+    tipo: 'haberes', empleado: e, condicion: e.condicion || 'negro', periodo: periodo, fechaPago: fechaPago,
+    antiguedad: calcularAntiguedad(e.ingreso),
+    conceptos: f.conceptos.map(function(c) { return { nombre: c.nombre, tipo: c.tipo, importe: c.importe }; }),
+    totalHaberes: f.haberes, totalDesc: f.descuentos, neto: neto, montoBlanco: 0, origen: 'planilla'
+  };
+  if (f.transf !== null || f.efect !== null) {
+    var t = Math.min(Math.max(f.transf || 0, 0), neto);
+    recibo.formaPago = { transferencia: redondearImporte(t), efectivo: redondearImporte(neto - t) };
+  }
+  return recibo;
+}
+
+// Valida y arma los recibos de las filas seleccionadas (null si falta algo)
+function recibosSeleccionadosImport() {
+  var incluidas = importPlanilla.filas.filter(function(f) { return f.incluir && !f.bloqueo; });
+  if (!incluidas.length) { alert('No hay filas seleccionadas para generar recibos.'); return null; }
+  var fechaPago = document.getElementById('imp-fecha-pago').value.trim();
+  if (!parseFechaAR(fechaPago)) { alert('Completá la fecha de pago (DD/MM/AAAA).'); document.getElementById('imp-fecha-pago').focus(); return null; }
+  var periodo = periodoImportActual();
+  return incluidas.map(function(f) { return armarReciboDesdeFilaImport(f, periodo, fechaPago); });
+}
+
+function verPreviaImport() {
+  var recibos = recibosSeleccionadosImport();
+  if (!recibos) return;
+  document.getElementById('preview-titulo').textContent = 'Vista previa - ' + recibos.length + ' recibo(s) de ' + periodoImportActual();
+  document.getElementById('preview-body').innerHTML = recibos.map(function(r) { return '<div class="recibo-print">' + renderReciboHTML(r) + '</div>'; }).join('');
+  document.getElementById('preview-actions').innerHTML = '<button class="btn btn-green" onclick="cerrarPreview(); guardarRecibosImportados(true);">Imprimir y guardar</button><button class="btn" onclick="cerrarPreview(); guardarRecibosImportados(false);">Guardar sin imprimir</button>';
+  document.getElementById('modal-preview').classList.add('open');
+}
+
+function guardarRecibosImportados(imprimir) {
+  var recibos = recibosSeleccionadosImport();
+  if (!recibos) return;
+  var periodo = periodoImportActual();
+  var total = recibos.reduce(function(s, r) { return s + r.neto; }, 0);
+  if (!confirm('Se van a ' + (imprimir ? 'imprimir y guardar ' : 'guardar ') + recibos.length + ' recibo(s) de ' + periodo + ' por un neto total de $ ' + fmt(total) + '.\n\nContinuar?')) return;
+  if (imprimir) {
+    document.getElementById('recibo-preview').innerHTML = htmlRecibosDosPorHoja(recibos);
+    window.print();
+  }
+  var d = datos();
+  d.recibos = d.recibos || [];
+  var fechaGuardado = new Date().toLocaleDateString('es-AR');
+  recibos.forEach(function(r) {
+    r.id = Date.now().toString() + Math.random().toString().slice(2);
+    r.fecha_guardado = fechaGuardado;
+    d.recibos.unshift(r);
+  });
+  // Se recuerda el nombre de la planilla de los empleados elegidos a mano,
+  // para vincularlos solos el mes que viene
+  importPlanilla.filas.forEach(function(f) {
+    if (!f.incluir || (f.match !== 'manual' && f.match !== 'sugerido')) return;
+    var emp = d.empleados.find(function(x) { return x.id === f.empId; });
+    if (emp) emp.nombrePlanilla = f.nombreNorm;
+  });
+  guardarDatos(d);
+  subirRecibosEnLote(recibos, empresaActual);
+  renderResumenInicio();
+  importPlanilla.filas = [];
+  document.getElementById('imp-archivo-nombre').textContent = '';
+  document.getElementById('imp-pegar').value = '';
+  document.getElementById('imp-hoja-wrap').style.display = 'none';
+  mostrarMensajeImport('<div class="import-ok-global">✓ Se guardaron <strong>' + recibos.length + ' recibo(s) de ' + periodo + '</strong> por un neto total de $ ' + fmt(total) + '. Los podés ver o reimprimir desde Historial.</div>');
+}
+
 var UNID_L = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
 var DIEC_L = ['DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISEIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE'];
 var DECE_L = ['', '', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
@@ -2493,7 +3073,14 @@ function renderReciboHTML(r) {
   }).join('');
 
   var formaPagoHTML;
-  if (r.condicion === 'monotributista') {
+  if (r.formaPago) {
+    // Forma de pago informada en la planilla importada (tiene prioridad)
+    var fpT = parseFloat(r.formaPago.transferencia) || 0;
+    var fpE = parseFloat(r.formaPago.efectivo) || 0;
+    formaPagoHTML = fpT > 0
+      ? '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Forma de pago - Transferencia</span><br><span class="rp-strong">$ ' + fmt(fpT) + '</span></div><div><span class="rp-lbl">Forma de pago - Efectivo</span><br><span class="rp-strong">$ ' + fmt(fpE) + '</span></div></div>'
+      : '<div class="rp-row"><span class="rp-lbl">Forma de pago - Efectivo</span> &nbsp;&nbsp; <span class="rp-strong">$ ' + fmt(fpE) + '</span></div>';
+  } else if (r.condicion === 'monotributista') {
     formaPagoHTML = '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Forma de pago - Transferencia (40%)</span><br><span class="rp-strong">$ ' + fmt(r.neto * 0.40) + '</span></div><div><span class="rp-lbl">Forma de pago - Efectivo (60%)</span><br><span class="rp-strong">$ ' + fmt(r.neto * 0.60) + '</span></div></div>';
   } else if (r.condicion === 'blanco') {
     formaPagoHTML = '<div class="rp-row rp-row-split"><div><span class="rp-lbl">Forma de pago - Transferencia (registrado)</span><br><span class="rp-strong">$ ' + fmt(r.montoBlanco) + '</span></div><div><span class="rp-lbl">Forma de pago - Efectivo (diferencia)</span><br><span class="rp-strong">$ ' + fmt(r.neto - r.montoBlanco) + '</span></div></div>';
@@ -2783,21 +3370,8 @@ function imprimirMasivo() {
     if (!confirm('Ya hay ' + yaGuardados + ' recibo(s) para el periodo ' + periodo + '. Imprimir y guardar de todas formas?')) return;
   }
   var emps = empsFiltrados.slice().sort(function(a, b) { return parseInt(a.legajo || 0) - parseInt(b.legajo || 0); });
-  var html = '';
-  var recibosGuardar = [];
-  for (var i = 0; i < emps.length; i += 2) {
-    var r1 = armarReciboMasivo(emps[i], tipo, periodo, fechaPago);
-    html += '<div class="recibo-print" style="page-break-inside:avoid;">' + renderReciboHTML(r1) + '</div>';
-    recibosGuardar.push(r1);
-    if (emps[i + 1]) {
-      html += '<div class="separador-hoja">- - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
-      var r2 = armarReciboMasivo(emps[i + 1], tipo, periodo, fechaPago);
-      html += '<div class="recibo-print" style="page-break-inside:avoid;">' + renderReciboHTML(r2) + '</div>';
-      recibosGuardar.push(r2);
-    }
-    if (i + 2 < emps.length) html += '<div style="page-break-after:always;"></div>';
-  }
-  document.getElementById('recibo-preview').innerHTML = html;
+  var recibosGuardar = emps.map(function(e) { return armarReciboMasivo(e, tipo, periodo, fechaPago); });
+  document.getElementById('recibo-preview').innerHTML = htmlRecibosDosPorHoja(recibosGuardar);
   window.print();
   var fechaGuardado = new Date().toLocaleDateString('es-AR');
   d.recibos = d.recibos || [];
@@ -2807,6 +3381,21 @@ function imprimirMasivo() {
     d.recibos.unshift(r);
   });
   guardarDatos(d);
+  subirRecibosEnLote(recibosGuardar, empresaActual);
+}
+
+// Arma el HTML de impresion con 2 recibos por hoja A4 (impresion masiva e importacion)
+function htmlRecibosDosPorHoja(recibos) {
+  var html = '';
+  for (var i = 0; i < recibos.length; i += 2) {
+    html += '<div class="recibo-print" style="page-break-inside:avoid;">' + renderReciboHTML(recibos[i]) + '</div>';
+    if (recibos[i + 1]) {
+      html += '<div class="separador-hoja">- - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
+      html += '<div class="recibo-print" style="page-break-inside:avoid;">' + renderReciboHTML(recibos[i + 1]) + '</div>';
+    }
+    if (i + 2 < recibos.length) html += '<div style="page-break-after:always;"></div>';
+  }
+  return html;
 }
 
 function armarReciboMasivo(e, tipo, periodo, fechaPago) {
@@ -3415,3 +4004,4 @@ function generarReciboDesdeLiquidacion(id) {
 }
 </script>
 </body>
+</html>
